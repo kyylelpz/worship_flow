@@ -155,65 +155,55 @@ class ChartSettingsScreen extends ConsumerWidget {
           const SizedBox(height: 12),
           const _SectionLabel('Display Mode'),
           Card(
-            child: Column(
-              children: [
-                for (final mode in ChartDisplayMode.values)
-                  RadioListTile<ChartDisplayMode>(
-                    value: mode,
-                    groupValue: settings.displayMode,
-                    title: Text(mode.label),
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: (v) {
-                      if (v != null) {
-                        controller.update(
-                          (s) => s.copyWith(displayMode: v),
-                        );
-                      }
-                    },
-                  ),
-              ],
+            child: RadioGroup<ChartDisplayMode>(
+              groupValue: settings.displayMode,
+              onChanged: (v) {
+                if (v != null) {
+                  controller.update((s) => s.copyWith(displayMode: v));
+                }
+              },
+              child: Column(
+                children: [
+                  for (final mode in ChartDisplayMode.values)
+                    RadioListTile<ChartDisplayMode>(
+                      value: mode,
+                      title: Text(mode.label),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 20),
           const _SectionLabel('Theme'),
           Card(
-            child: Column(
-              children: [
-                RadioListTile<ThemeMode>(
-                  value: ThemeMode.light,
-                  groupValue: themeMode,
-                  title: const Text('Light'),
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (v) {
-                    if (v != null) {
-                      ref.read(themeModeProvider.notifier).setMode(v);
-                    }
-                  },
-                ),
-                RadioListTile<ThemeMode>(
-                  value: ThemeMode.dark,
-                  groupValue: themeMode,
-                  title: const Text('Dark'),
-                  subtitle: const Text('Optimized for stage readability'),
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (v) {
-                    if (v != null) {
-                      ref.read(themeModeProvider.notifier).setMode(v);
-                    }
-                  },
-                ),
-                RadioListTile<ThemeMode>(
-                  value: ThemeMode.system,
-                  groupValue: themeMode,
-                  title: const Text('System'),
-                  contentPadding: EdgeInsets.zero,
-                  onChanged: (v) {
-                    if (v != null) {
-                      ref.read(themeModeProvider.notifier).setMode(v);
-                    }
-                  },
-                ),
-              ],
+            child: RadioGroup<ThemeMode>(
+              groupValue: themeMode,
+              onChanged: (v) {
+                if (v != null) {
+                  ref.read(themeModeProvider.notifier).setMode(v);
+                }
+              },
+              child: const Column(
+                children: [
+                  RadioListTile<ThemeMode>(
+                    value: ThemeMode.light,
+                    title: Text('Light'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  RadioListTile<ThemeMode>(
+                    value: ThemeMode.dark,
+                    title: Text('Dark'),
+                    subtitle: Text('Optimized for stage readability'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  RadioListTile<ThemeMode>(
+                    value: ThemeMode.system,
+                    title: Text('System'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 24),

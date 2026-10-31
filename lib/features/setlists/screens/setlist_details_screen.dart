@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -164,13 +166,13 @@ class _DetailsBody extends ConsumerWidget {
     final repo = ref.read(setlistRepositoryProvider);
     switch (value) {
       case 'edit':
-        context.push(RoutePaths.setlistEditorFor(setlist.id));
+        unawaited(context.push(RoutePaths.setlistEditorFor(setlist.id)));
         break;
       case 'duplicate':
         final newId = await repo.duplicate(setlist.id);
         if (!context.mounted) return;
         ref.invalidate(setlistByIdProvider(setlist.id));
-        context.push(RoutePaths.setlistDetailsFor(newId));
+        unawaited(context.push(RoutePaths.setlistDetailsFor(newId)));
         break;
       case 'publish':
         final ok = await _confirm(context,

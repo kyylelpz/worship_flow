@@ -168,7 +168,6 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
 
   void _reorder(int oldIndex, int newIndex) {
     setState(() {
-      if (newIndex > oldIndex) newIndex -= 1;
       final item = _items.removeAt(oldIndex);
       _items.insert(newIndex, item);
       _dirty = true;
@@ -242,10 +241,10 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
 
     return PopScope(
       canPop: !_dirty,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final ok = await _confirmDiscard();
-        if (ok && mounted) context.pop();
+        if (ok && context.mounted) context.pop();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -313,7 +312,7 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _items.length,
-                onReorder: _reorder,
+                onReorderItem: _reorder,
                 buildDefaultDragHandles: false,
                 itemBuilder: (ctx, i) {
                   final item = _items[i];
@@ -587,22 +586,31 @@ class _ItemConfigSheetState extends State<_ItemConfigSheet> {
           const SizedBox(height: 20),
           Text('Arrangement', style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
-          for (final a in widget.song.arrangements)
-            RadioListTile<String>(
-              value: a.id,
-              groupValue: _arrangementId,
-              contentPadding: EdgeInsets.zero,
-              title: Text(a.name),
-              subtitle: Text('${a.bpm} BPM · ${a.timeSignature}'),
-              onChanged: (v) {
-                if (v != null) {
-                  setState(() {
-                    _arrangementId = v;
-                    _key = a.performanceKey;
-                  });
-                }
-              },
+          RadioGroup<String>(
+            groupValue: _arrangementId,
+            onChanged: (v) {
+              if (v != null) {
+                final selected = widget.song.arrangements.firstWhere(
+                  (a) => a.id == v,
+                );
+                setState(() {
+                  _arrangementId = v;
+                  _key = selected.performanceKey;
+                });
+              }
+            },
+            child: Column(
+              children: [
+                for (final a in widget.song.arrangements)
+                  RadioListTile<String>(
+                    value: a.id,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(a.name),
+                    subtitle: Text('${a.bpm} BPM · ${a.timeSignature}'),
+                  ),
+              ],
             ),
+          ),
           const SizedBox(height: 16),
           if (arrangement != null) ...[
             Text('Performance Key', style: theme.textTheme.titleSmall),

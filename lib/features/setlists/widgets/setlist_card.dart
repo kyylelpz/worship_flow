@@ -21,7 +21,7 @@ class SetlistCard extends ConsumerWidget {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => context.push(RoutePaths.setlistDetailsFor(setlist.id)),
+        onTap: () => context.push(RoutePaths.setlistRehearsalFor(setlist.id)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

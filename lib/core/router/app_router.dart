@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/providers/auth_providers.dart' as auth;
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/groups/screens/group_members_screen.dart';
 import '../../features/groups/screens/group_selection_screen.dart';
 import '../../features/profile/screens/chart_settings_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/rehearsal/screens/rehearsal_screen.dart';
 import '../../features/setlists/screens/setlist_details_screen.dart';
 import '../../features/setlists/screens/setlist_editor_screen.dart';
 import '../../features/setlists/screens/setlists_screen.dart';
@@ -16,11 +18,8 @@ import '../models/session_state.dart';
 import 'route_paths.dart';
 import 'router_refresh.dart';
 
-/// Session provider is defined here (not in auth_providers) so that the router
-/// and auth layer can both depend on it without a circular import.
-///
-/// The actual controller implementation is injected from auth_providers when
-/// the app starts, but we declare the type here to keep the router self-contained.
+/// Legacy router session controller retained for API compatibility.
+/// Active routing uses the auth layer's session provider below.
 class SessionController extends StateNotifier<SessionState> {
   SessionController(super.state);
 
@@ -31,11 +30,11 @@ class SessionController extends StateNotifier<SessionState> {
 
 final sessionProvider =
     StateNotifierProvider<SessionController, SessionState>((ref) {
-  // Phase 1 placeholder — replaced by auth_providers.dart override at startup.
+  // Legacy provider; authentication and routing use auth.sessionProvider.
   return SessionController(const SessionState());
 });
 
-/// The GoRouter itself. Rebuilt when session changes so redirects re-run.
+/// The GoRouter refreshes redirects when the auth session changes.
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = RouterRefresh(ref);
   ref.onDispose(refresh.dispose);
@@ -44,7 +43,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: RoutePaths.login,
     refreshListenable: refresh,
     redirect: (context, state) {
-      final session = ref.read(sessionProvider);
+      final session = ref.read(auth.sessionProvider);
       final loc = state.matchedLocation;
       final loggingIn = loc == RoutePaths.login;
       final choosingGroup = loc == RoutePaths.groups;
@@ -85,6 +84,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const SetlistsScreen(),
       ),
       GoRoute(
+        path: RoutePaths.setlistRehearsal,
+        builder: (_, state) => RehearsalScreen(
+          setlistId: state.pathParameters['setlistId']!,
+        ),
+      ),
+      GoRoute(
         path: RoutePaths.setlistDetails,
         builder: (_, state) => SetlistDetailsScreen(
           setlistId: state.pathParameters['setlistId']!,
@@ -95,11 +100,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (_, state) => SetlistEditorScreen(
               setlistId: state.pathParameters['setlistId']!,
             ),
-          ),
-          GoRoute(
-            path: 'rehearse',
-            redirect: (_, state) => RoutePaths.setlistDetailsFor(
-                state.pathParameters['setlistId']!),
           ),
           GoRoute(
             path: 'live',

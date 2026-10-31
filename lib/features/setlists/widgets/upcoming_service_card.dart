@@ -22,7 +22,7 @@ class UpcomingServiceCard extends ConsumerWidget {
       color: theme.colorScheme.primary,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => context.push(RoutePaths.setlistDetailsFor(next.id)),
+        onTap: () => context.push(RoutePaths.setlistRehearsalFor(next.id)),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
