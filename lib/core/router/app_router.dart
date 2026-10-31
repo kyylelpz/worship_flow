@@ -14,6 +14,7 @@ import '../../features/setlists/screens/setlists_screen.dart';
 import '../../features/songs/screens/song_details_screen.dart';
 import '../../features/songs/screens/song_editor_screen.dart';
 import '../../features/songs/screens/song_library_screen.dart';
+import '../../features/songs/providers/song_providers.dart';
 import '../models/session_state.dart';
 import 'route_paths.dart';
 import 'router_refresh.dart';
@@ -42,7 +43,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: RoutePaths.login,
     refreshListenable: refresh,
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final session = ref.read(auth.sessionProvider);
       final loc = state.matchedLocation;
       final loggingIn = loc == RoutePaths.login;
@@ -60,6 +61,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return RoutePaths.setlists;
       }
 
+      final managingSong = loc == RoutePaths.songCreate ||
+          (loc.startsWith('${RoutePaths.songs}/') && loc.endsWith('/edit'));
+      if (managingSong &&
+          !await ref
+              .read(songRepositoryProvider)
+              .canManage(session.selectedGroupId!)) {
+        return RoutePaths.songs;
+      }
       return null;
     },
     routes: [
@@ -112,6 +121,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.songs,
         builder: (_, __) => const SongLibraryScreen(),
         routes: [
+          GoRoute(
+              path: 'new', builder: (_, __) => const SongEditorScreen.create()),
           GoRoute(
             path: ':songId',
             builder: (_, state) => SongDetailsScreen(

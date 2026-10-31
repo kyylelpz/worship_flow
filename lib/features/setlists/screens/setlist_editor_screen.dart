@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/mock_data/mock_songs.dart';
+import '../../songs/providers/song_providers.dart';
 import '../../../core/models/arrangement.dart';
 import '../../../core/models/setlist_item.dart';
 import '../../../core/models/song.dart';
@@ -58,8 +58,8 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     if (!_dirty) setState(() => _dirty = true);
   }
 
-  Future<void> _saveDraft() async {
-    if (_saving) return;
+  Future<bool> _saveDraft() async {
+    if (_saving) return false;
     setState(() => _saving = true);
     try {
       await ref.read(setlistRepositoryProvider).updateMetadata(
@@ -73,7 +73,7 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
           .read(setlistRepositoryProvider)
           .saveDraft(widget.setlistId, _items);
       ref.invalidate(setlistByIdProvider(widget.setlistId));
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _saving = false;
         _dirty = false;
@@ -81,12 +81,14 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Draft saved.')),
       );
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not save: $e')),
       );
+      return false;
     }
   }
 
@@ -113,8 +115,8 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     );
     if (ok != true || !mounted) return;
 
-    await _saveDraft();
-    if (!mounted) return;
+    final saved = await _saveDraft();
+    if (!saved || !mounted) return;
     await ref.read(setlistRepositoryProvider).publish(widget.setlistId);
     ref.invalidate(setlistByIdProvider(widget.setlistId));
     if (!mounted) return;
@@ -200,7 +202,7 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
   }
 
   Song? _songFor(String id) {
-    for (final s in mockSongs) {
+    for (final s in ref.read(songsListProvider)) {
       if (s.id == id) return s;
     }
     return null;
@@ -231,6 +233,7 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    ref.watch(groupSongsProvider);
 
     if (!_loaded) {
       return Scaffold(
@@ -457,21 +460,29 @@ class _EmptySongs extends StatelessWidget {
   }
 }
 
-class _SongPickerSheet extends StatefulWidget {
+class _SongPickerSheet extends ConsumerStatefulWidget {
   const _SongPickerSheet();
 
   @override
-  State<_SongPickerSheet> createState() => _SongPickerSheetState();
+  ConsumerState<_SongPickerSheet> createState() => _SongPickerSheetState();
 }
 
-class _SongPickerSheetState extends State<_SongPickerSheet> {
+class _SongPickerSheetState extends ConsumerState<_SongPickerSheet> {
   final _selected = <String>{};
   String _query = '';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final filtered = mockSongs.where((s) {
+    final asyncSongs = ref.watch(groupSongsProvider);
+    if (asyncSongs.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (asyncSongs.hasError) {
+      return Center(child: Text('Could not load songs: ${asyncSongs.error}'));
+    }
+    final songs = ref.watch(songsListProvider);
+    final filtered = songs.where((s) {
       final q = _query.toLowerCase();
       return s.title.toLowerCase().contains(q) ||
           s.artist.toLowerCase().contains(q);
@@ -492,9 +503,8 @@ class _SongPickerSheetState extends State<_SongPickerSheet> {
                 const Spacer(),
                 TextButton(
                   onPressed: () {
-                    final picked = mockSongs
-                        .where((s) => _selected.contains(s.id))
-                        .toList();
+                    final picked =
+                        songs.where((s) => _selected.contains(s.id)).toList();
                     Navigator.of(ctx).pop(picked);
                   },
                   child: Text('Add (${_selected.length})'),

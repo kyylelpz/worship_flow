@@ -35,3 +35,8 @@ abstract class SetlistRepository {
   /// Delete a setlist.
   Future<void> delete(String setlistId);
 }
+
+/// Immediate reference lookup for atomic in-memory catalog deletion guards.
+abstract interface class SetlistSongReferences {
+  bool referencesSong(String groupId, String songId, {String? arrangementId});
+}

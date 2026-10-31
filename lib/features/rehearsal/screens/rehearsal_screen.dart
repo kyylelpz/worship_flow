@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/mock_data/mock_songs.dart';
+import '../../songs/providers/song_providers.dart';
 import '../../../core/models/setlist.dart';
 import '../../../core/models/chart_settings.dart';
 import '../../../core/models/setlist_item.dart';
@@ -119,7 +119,20 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
     final items = _items(setlist);
     final index = _selected < items.length ? _selected : 0;
     final item = items.isEmpty ? null : items[index];
-    final song = mockSongs.where((song) => song.id == item?.songId).firstOrNull;
+    final asyncSongs = ref.watch(groupSongsProvider);
+    if (asyncSongs.isLoading) {
+      return Scaffold(
+          appBar: AppBar(title: const Text('Rehearsal')),
+          body: const Center(child: CircularProgressIndicator()));
+    }
+    if (asyncSongs.hasError) {
+      return Scaffold(
+          appBar: AppBar(title: const Text('Rehearsal')),
+          body:
+              Center(child: Text('Could not load songs: ${asyncSongs.error}')));
+    }
+    final songs = ref.watch(songsListProvider);
+    final song = songs.where((song) => song.id == item?.songId).firstOrNull;
     final arrangement = song?.arrangements
         .where((arrangement) => arrangement.id == item?.arrangementId)
         .firstOrNull;
@@ -254,7 +267,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                         selectedTileColor:
                             Theme.of(context).colorScheme.primaryContainer,
                         leading: Text('${i + 1}'),
-                        title: Text(mockSongs
+                        title: Text(songs
                                 .where((song) => song.id == items[i].songId)
                                 .firstOrNull
                                 ?.title ??

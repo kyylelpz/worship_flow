@@ -21,14 +21,20 @@ class Song {
 
   Arrangement get primaryArrangement => arrangements.first;
 
-  Song copyWith({bool? isFavorite}) {
+  Song copyWith(
+      {bool? isFavorite,
+      String? title,
+      String? artist,
+      String? category,
+      String? defaultKey,
+      List<Arrangement>? arrangements}) {
     return Song(
       id: id,
-      title: title,
-      artist: artist,
-      category: category,
-      defaultKey: defaultKey,
-      arrangements: arrangements,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      category: category ?? this.category,
+      defaultKey: defaultKey ?? this.defaultKey,
+      arrangements: arrangements ?? this.arrangements,
       isFavorite: isFavorite ?? this.isFavorite,
     );
   }

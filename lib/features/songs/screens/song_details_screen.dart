@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/mock_data/mock_songs.dart';
-import '../../../core/models/song.dart';
+import '../providers/song_providers.dart';
+import '../widgets/song_action_helpers.dart';
+import 'arrangement_editor_screen.dart';
+import '../../../core/models/arrangement.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -15,9 +17,20 @@ class SongDetailsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final song = _findSong(songId);
-    final role = ref.watch(currentRoleProvider);
-    final canEdit = role?.canManageSongs ?? false;
+    final asyncSongs = ref.watch(groupSongsProvider);
+    if (asyncSongs.isLoading) {
+      return Scaffold(
+          appBar: AppBar(),
+          body: const Center(child: CircularProgressIndicator()));
+    }
+    if (asyncSongs.hasError) {
+      return Scaffold(
+          appBar: AppBar(),
+          body:
+              Center(child: Text('Could not load songs: ${asyncSongs.error}')));
+    }
+    final song = ref.watch(songByIdProvider(songId));
+    final canEdit = ref.watch(canManageSongsProvider);
     final theme = Theme.of(context);
 
     if (song == null) {
@@ -37,6 +50,24 @@ class SongDetailsScreen extends ConsumerWidget {
               icon: const Icon(Icons.edit_rounded),
               onPressed: () => context.push(RoutePaths.songEditorFor(song.id)),
             ),
+          if (canEdit)
+            IconButton(
+                tooltip: 'Delete Song',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  final group = ref.read(selectedGroupIdProvider)!;
+                  if (!await confirmSongAction(context, 'Delete song?',
+                      'Songs used in published or draft setlists cannot be deleted.')) {
+                    return;
+                  }
+                  if (!context.mounted) return;
+                  await performSongAction(context, () async {
+                    await ref
+                        .read(songRepositoryProvider)
+                        .deleteSong(group, song.id);
+                    if (context.mounted) context.go(RoutePaths.songs);
+                  }, 'Song deleted.');
+                }),
         ],
       ),
       body: ListView(
@@ -67,9 +98,67 @@ class SongDetailsScreen extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Text(a.name, style: theme.textTheme.titleSmall),
-                        const Spacer(),
+                        Expanded(
+                            child: Text(a.name,
+                                style: theme.textTheme.titleSmall)),
                         _Pill(label: a.performanceKey),
+                        if (canEdit)
+                          PopupMenuButton<String>(
+                              tooltip: 'Manage ${a.name}',
+                              itemBuilder: (_) => [
+                                    for (final action in [
+                                      'Edit',
+                                      'Duplicate',
+                                      'Delete'
+                                    ])
+                                      PopupMenuItem(
+                                          value: action, child: Text(action))
+                                  ],
+                              onSelected: (action) async {
+                                final group =
+                                    ref.read(selectedGroupIdProvider)!;
+                                if (action == 'Edit') {
+                                  final edited = await Navigator.of(context)
+                                      .push<Arrangement>(MaterialPageRoute(
+                                          fullscreenDialog: true,
+                                          builder: (_) =>
+                                              ArrangementEditorScreen(
+                                                  arrangement: a)));
+                                  if (edited == null || !context.mounted) {
+                                    return;
+                                  }
+                                  await performSongAction(
+                                      context,
+                                      () => ref
+                                          .read(songRepositoryProvider)
+                                          .updateArrangement(
+                                              group, song.id, edited),
+                                      'Arrangement saved.');
+                                } else {
+                                  if (action == 'Delete' &&
+                                      !await confirmSongAction(
+                                          context,
+                                          'Delete arrangement?',
+                                          'Referenced arrangements cannot be deleted.')) {
+                                    return;
+                                  }
+                                  if (!context.mounted) return;
+                                  await performSongAction(context, () async {
+                                    final repo =
+                                        ref.read(songRepositoryProvider);
+                                    if (action == 'Delete') {
+                                      await repo.deleteArrangement(
+                                          group, song.id, a.id);
+                                    } else {
+                                      await repo.duplicateArrangement(
+                                          group, song.id, a.id);
+                                    }
+                                  },
+                                      action == 'Delete'
+                                          ? 'Arrangement deleted.'
+                                          : 'Arrangement duplicated.');
+                                }
+                              }),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -122,7 +211,7 @@ class SongDetailsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Chart rendering engine arrives in Phase 2.',
+            'Canonical source for the primary arrangement. Rehearsal renders the selected setlist arrangement.',
             style: theme.textTheme.bodySmall?.copyWith(
               fontStyle: FontStyle.italic,
             ),
@@ -130,13 +219,6 @@ class SongDetailsScreen extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  static Song? _findSong(String id) {
-    for (final s in mockSongs) {
-      if (s.id == id) return s;
-    }
-    return null;
   }
 }
 

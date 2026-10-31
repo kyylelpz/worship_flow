@@ -63,8 +63,8 @@ void main() {
     final first = chord(tester, line, 0);
     final second = chord(tester, line, 1);
     final third = chord(tester, line, 2);
-    expect(second.left, closeTo(first.right + 4, .1));
-    expect(third.left, closeTo(second.right + 4, .1));
+    expect(second.left, closeTo(first.right + 10, .1));
+    expect(third.left, closeTo(second.right + 10, .1));
     expect(second.top, first.top);
     expect(third.top, first.top);
     aligned(tester, line);
@@ -81,7 +81,7 @@ void main() {
     final start = lyric(tester, line, 0);
     final syllable = lyric(tester, line, 3);
     expect(syllable.left, greaterThan(start.right));
-    expect(syllable.left, closeTo(chord(tester, line, 0).right + 4, .1));
+    expect(syllable.left, closeTo(chord(tester, line, 0).right + 10, .1));
     expect(lyric(tester, line, 6).left, greaterThan(syllable.right));
     expect(chord(tester, line, 2).top, chord(tester, line, 0).top);
     aligned(tester, line);

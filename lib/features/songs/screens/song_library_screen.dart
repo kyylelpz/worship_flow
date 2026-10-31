@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/mock_data/mock_songs.dart';
+import '../providers/song_providers.dart';
 import '../../../core/models/song.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../auth/providers/auth_providers.dart';
 
 final _songSearchProvider = StateProvider<String>((ref) => '');
 final _songCategoryProvider = StateProvider<String?>((ref) => null);
@@ -19,7 +18,8 @@ class SongLibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
-  final _searchController = TextEditingController();
+  late final _searchController =
+      TextEditingController(text: ref.read(_songSearchProvider));
 
   @override
   void dispose() {
@@ -30,22 +30,25 @@ class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final role = ref.watch(currentRoleProvider);
-    final canEdit = role?.canManageSongs ?? false;
+    final canEdit = ref.watch(canManageSongsProvider);
+    final asyncSongs = ref.watch(groupSongsProvider);
+    final songs = ref.watch(songsListProvider);
     final query = ref.watch(_songSearchProvider);
     final category = ref.watch(_songCategoryProvider);
 
     final categories = <String>{
-      for (final s in mockSongs) s.category,
+      for (final s in songs) s.category,
     }.toList()
       ..sort();
+    final selectedCategory = categories.contains(category) ? category : null;
 
-    final filtered = mockSongs.where((s) {
+    final filtered = songs.where((s) {
       final q = query.toLowerCase().trim();
       final matchesQuery = q.isEmpty ||
           s.title.toLowerCase().contains(q) ||
           s.artist.toLowerCase().contains(q);
-      final matchesCategory = category == null || s.category == category;
+      final matchesCategory =
+          selectedCategory == null || s.category == selectedCategory;
       return matchesQuery && matchesCategory;
     }).toList();
 
@@ -57,83 +60,86 @@ class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
             IconButton(
               tooltip: 'New Song',
               icon: const Icon(Icons.add_rounded),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Song creation comes with Firebase.'),
-                  ),
-                );
-              },
+              onPressed: () => context.push(RoutePaths.songCreate),
             ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        children: [
-          TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              hintText: 'Search by title or artist',
-              prefixIcon: const Icon(Icons.search_rounded),
-              suffixIcon: query.isEmpty
-                  ? null
-                  : IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () {
-                        _searchController.clear();
-                        ref.read(_songSearchProvider.notifier).state = '';
-                      },
+      body: asyncSongs.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : asyncSongs.hasError
+              ? Center(child: Text('Could not load songs: ${asyncSongs.error}'))
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                  children: [
+                    TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search by title or artist',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: query.isEmpty
+                            ? null
+                            : IconButton(
+                                icon: const Icon(Icons.close_rounded),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  ref.read(_songSearchProvider.notifier).state =
+                                      '';
+                                },
+                              ),
+                      ),
+                      onChanged: (v) =>
+                          ref.read(_songSearchProvider.notifier).state = v,
                     ),
-            ),
-            onChanged: (v) => ref.read(_songSearchProvider.notifier).state = v,
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _CategoryChip(
-                  label: 'All',
-                  selected: category == null,
-                  onTap: () =>
-                      ref.read(_songCategoryProvider.notifier).state = null,
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _CategoryChip(
+                            label: 'All',
+                            selected: selectedCategory == null,
+                            onTap: () => ref
+                                .read(_songCategoryProvider.notifier)
+                                .state = null,
+                          ),
+                          const SizedBox(width: 8),
+                          for (final c in categories) ...[
+                            _CategoryChip(
+                              label: c,
+                              selected: selectedCategory == c,
+                              onTap: () => ref
+                                  .read(_songCategoryProvider.notifier)
+                                  .state = c,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (filtered.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
+                        child: Column(
+                          children: [
+                            const Icon(
+                              Icons.search_off_rounded,
+                              size: 48,
+                              color: AppColors.lightSecondaryText,
+                            ),
+                            const SizedBox(height: 12),
+                            Text('No songs found',
+                                style: theme.textTheme.titleMedium),
+                          ],
+                        ),
+                      )
+                    else
+                      for (final s in filtered) ...[
+                        _SongListTile(song: s),
+                        const SizedBox(height: 10),
+                      ],
+                  ],
                 ),
-                const SizedBox(width: 8),
-                for (final c in categories) ...[
-                  _CategoryChip(
-                    label: c,
-                    selected: category == c,
-                    onTap: () =>
-                        ref.read(_songCategoryProvider.notifier).state = c,
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (filtered.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.search_off_rounded,
-                    size: 48,
-                    color: AppColors.lightSecondaryText,
-                  ),
-                  const SizedBox(height: 12),
-                  Text('No songs found', style: theme.textTheme.titleMedium),
-                ],
-              ),
-            )
-          else
-            for (final s in filtered) ...[
-              _SongListTile(song: s),
-              const SizedBox(height: 10),
-            ],
-        ],
-      ),
     );
   }
 }

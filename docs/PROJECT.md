@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Every Note for His Glory**. A Flutter worship-team planning UI with mock sign-in, group membership, song browsing, setlist editing, profile display, chart preferences, and setlist rehearsal navigation. This is a UI foundation with in-memory data, not a connected production service.
+**Every Note for His Glory**. A Flutter worship-team planning UI with mock sign-in, group membership, group-scoped song/arrangement management, setlist editing, profile display, chart preferences, and setlist rehearsal navigation. This is a UI foundation with in-memory data, not a connected production service.
 
 ## Tech stack
 
@@ -17,25 +17,25 @@ Analyzer fixes were verified with Flutter **3.44.6 / Dart 3.12.2**. Current radi
 - `lib/features/auth/`: mock Google sign-in with loading/error handling and sign-out.
 - `groups/`: user-group list, membership display and in-memory role changes. Join/create show stub dialogs; repository methods are no-ops.
 - `setlists/`: group lists, upcoming/previous/draft filters, next-service card, details, creation, duplication, deletion, metadata editing, song selection/reordering/removal, arrangement/key selection, draft saving and publishing in memory.
-- `songs/`: title/artist search, category filtering, details, arrangement metadata, vocalist keys, and raw primary-arrangement ChordPro source. Editor fields are present; save and creation only display messages.
+- `songs/`: reactive, group-scoped song create/edit/delete, title/artist search, category filtering and details. Authorized users manage arrangements (create/edit/duplicate/delete), vocalist key presets and canonical source through basic forms. Song metadata includes title, artist, category, default key and favorite. Referenced song/arrangement deletion is blocked.
 - `profile/`: read-only account/group display, group switching, sign-out, chart preferences and theme selection. Preferences are in memory; the shared rehearsal renderer consumes lyric/chord/header font sizes, global scale, line spacing, chart width, display mode and Standard/Nashville notation.
 - `charts/`: pure Dart ChordPro parser, typed chart/chord models, transposition and display projections, explicit optional timing grids and a shared Flutter renderer with fixed right-side floating parsed-section bubbles. The old source adapter/viewer remains available for compatibility. `rehearsal/`: actual setlist player screen with a song drawer and horizontal song switching. `live/`: whitespace-only placeholder.
 
 ## State and data flow
 
-Feature repositories are injected through `authRepositoryProvider`, `groupRepositoryProvider`, and `setlistRepositoryProvider`; all use mock implementations with simulated delays. `AuthRepository` exposes sign-in/out and current-user lookup. `AuthController` owns the feature `sessionProvider`: user, session role, selected group ID, loading and error state. Convenience providers expose user/role/group ID. Sign-out resets session state; startup does not restore a user.
+Feature repositories are injected through `authRepositoryProvider`, `groupRepositoryProvider`, `setlistRepositoryProvider`, and `songRepositoryProvider`; all use mock implementations with simulated delays. `AuthRepository` exposes sign-in/out and current-user lookup. `AuthController` owns the feature `sessionProvider`: user, session role, selected group ID, loading and error state. Convenience providers expose user/role/group ID. Sign-out resets session state; startup does not restore a user.
 
 `GroupRepository` exposes all/user-filtered streams, ID lookup, join/create, and member-role updates. Its mock emits snapshots after changes. Derived providers resolve selected group, group by ID, current membership and membership role. `SetlistRepository` exposes a group stream, ID lookup, draft creation/save, metadata updates, publish, duplicate and delete. Stream changes update lists; detail futures are explicitly invalidated by callers. Both mock repositories dispose their broadcast controllers through provider disposal.
 
 Setlist filter state derives sorted lists from the selected group's stream. Upcoming/previous include published setlists; drafts include drafts and published setlists with draft changes. Details and published rehearsal use `publishedItems`; the editor loads `draftItems ?? publishedItems`. Rehearsal previews draft-only items for roles with `canManageSetlists`; other roles see an unpublished-state message. Publishing copies draft items into published items and clears the draft. Metadata updates apply immediately rather than having a separate draft copy.
 
-Song screens read `mockSongs` directly; private search/category providers live in the library screen. Song repository/provider files are placeholders. Theme and chart settings use in-memory `StateNotifierProvider`s; theme defaults to light. Chart settings include typography, scale, spacing, width, Nashville notation and display mode; reset resets chart settings, not theme.
+`songRepositoryProvider` injects `MockSongRepository`, backed by `songCatalogProvider` / `InMemorySongCatalog`. `groupSongsProvider` subscribes to the selected group's authorized catalog and restarts on session/membership changes; `songsListProvider` and `songByIdProvider` derive reactive lookups. Library, details, editor, setlist selection/details and Rehearsal now use these providers. Only catalog seeding reads `mockSongs`. Search/category state remains in the library screen; unavailable categories fall back to All after group/catalog changes. Theme and chart settings use in-memory `StateNotifierProvider`s; theme defaults to light. Chart settings include typography, scale, spacing, width, Nashville notation and display mode; reset resets chart settings, not theme.
 
 Routing reads the auth layer's `sessionProvider`, matching `RouterRefresh`. Refreshes occur when user ID or selected group ID changes, so sign-in opens group selection, selecting a group opens setlists, clearing the group returns to selection, and sign-out returns to login. The older `SessionController` and router-local provider remain for API compatibility but are not used by redirects.
 
 ## Navigation
 
-Initial route is `/login`. Redirect rules as written: unauthenticated requests go to `/login`; authenticated sessions without a group go to `/groups`; authenticated sessions with a group visiting login/groups go to `/setlists`. There are no role-based route guards.
+Initial route is `/login`. Redirect rules as written: unauthenticated requests go to `/login`; authenticated sessions without a group go to `/groups`; authenticated sessions with a group visiting login/groups go to `/setlists`. Song creation/editing routes check repository-authorized group management access; other existing routes retain their prior guards.
 
 | Route | Destination |
 | --- | --- |
@@ -47,9 +47,10 @@ Initial route is `/login`. Redirect rules as written: unauthenticated requests g
 | `/setlists/:setlistId/edit` | Setlist editor |
 | `/setlists/:setlistId/rehearse` | Rehearsal: first song, continuous chord chart, song drawer |
 | `/setlists/:setlistId/live` | Redirects to that setlist's details |
-| `/songs` | Song library |
+| `/songs` | Selected-group song library |
+| `/songs/new` | Create song with initial arrangements (authorized managers only) |
 | `/songs/:songId` | Song details |
-| `/songs/:songId/edit` | Song editor stub |
+| `/songs/:songId/edit` | Song metadata and arrangement management (authorized managers only) |
 | `/profile` | Profile |
 | `/profile/chart-settings` | Chart preferences |
 
@@ -69,15 +70,15 @@ Live entry is enabled for permitted roles on nonempty published setlists and ret
 | `worshipLeader` (Worship Leader) | No | Yes | Yes |
 | `worshipTrainee` (Worship Trainee) | No | No | Yes |
 
-These are `canManageMembers`, `canManageSongs`, `canManageSetlists`, and `canEnterLiveMode` getters. Song/setlist UI uses the session role; member management uses the actual membership role from `roleInGroupProvider`. Mock repositories do not enforce authorization, and editor routes do not enforce these permissions independently. Live remains a redirect regardless of its permission getter.
+These are `canManageMembers`, `canManageSongs`, `canManageSetlists`, and `canEnterLiveMode` getters. Setlist UI retains session-role checks; member management uses the actual membership role from `roleInGroupProvider`. Song management requires both an Administrator/Worship Leader session role and an Administrator/Worship Leader membership in the selected group. Song reads also verify authenticated membership and selected-group scope. `canManageSongsProvider`, protected `/songs/new` and song-edit routes, and every `SongRepository` mutation enforce these checks; repository operations recheck the current session after asynchronous membership lookup. Route refresh observes session roles and membership changes. Existing group/setlist mock repositories retain their previous permission behavior; song catalog integrity checks are separate from backend authorization. Live remains a redirect regardless of its permission getter.
 
-The group selection screen includes a DEV role-switch FAB and clear-group control. It changes the session role without changing user/membership records. It is described as development-only but is rendered unconditionally, without a debug-build guard. Mock sign-in always returns Jordan as session Administrator, even though group membership roles differ.
+The group selection screen includes a DEV role-switch FAB and clear-group control. It changes the session role without changing user/membership records. For songs it can reduce access, but cannot elevate a trainee membership into a manager. It is described as development-only but is rendered unconditionally, without a debug-build guard. Mock sign-in always returns Jordan as session Administrator, even though group membership roles differ.
 
 ## Mock data
 
 - Users: `user-1` Jordan Rivera (Acoustic Guitar), `user-2` Avery Chen (Keys), `user-3` Noah Patel (Drums); example.com emails and initials are fixtures.
 - `group-1`, Grace Community Worship / Grace Community Church: Jordan Administrator, Avery Worship Leader, Noah Worship Trainee. `group-2`, Riverside Youth Band / Riverside Chapel: Jordan Worship Leader, Avery Administrator. Join dates are relative to fixture initialization.
-- Eight songs, all credited to Worship Flow Originals, with embedded ChordPro and favorite/category metadata:
+- Each of the two fixture groups starts with an independent copy of the same eight songs/arrangement IDs, preserving existing setlist references. Ownership is stored by group in the catalog rather than adding fields to the public models; new IDs use UUIDs and changes do not propagate between groups. All seed songs are credited to Worship Flow Originals, with embedded ChordPro and favorite/category metadata:
 
 | ID | Title | Full Band key / BPM |
 | --- | --- | --- |
@@ -150,17 +151,27 @@ Optional timing grids live in the **same canonical arrangement source**, alongsi
 
 There is no playback clock, metronome, tempo automation, tuplets, variable-duration slot syntax, nested sections/repeats, polyrhythm, inferred rhythmic alignment or Live implementation. Unknown/malformed source remains canonical; unsupported timing is reported instead of fabricated.
 
+## Song library CRUD (Phase 3A)
+
+- `SongRepository` provides authorized catalog streams/lookups, song create/update/delete and arrangement create/update/duplicate/delete. `Song.copyWith` and `Arrangement.copyWith` support immutable edits while preserving IDs. Song metadata saves cannot replace the arrangement collection; arrangement operations have their own methods. Repository snapshots freeze arrangement/preset lists.
+- Creating a song requires at least one valid arrangement. Existing song metadata is saved with **Save Song**; arrangement actions on existing songs save immediately, as stated in the editor. New-song arrangements remain local drafts until the song is created. Group changes block an already-open metadata editor from saving into another group's catalog.
+- Validation requires title, artist, category, default key, arrangement name and nonempty source. Keys use the existing major/minor engine parser; BPM is an integer 1–400; meters are limited to 3/4, 4/4 and 6/8. Vocalist names/keys are required, names are unique ignoring case, and preset keys must retain the arrangement's major/minor mode. A recognized source key must match the arrangement's mode. Source is not auto-formatted, trimmed, transposed or rewritten when metadata changes; full ChordPro linting remains deferred.
+- Song/arrangement deletion requires confirmation. `SetlistSongReferences` supplies an immediate in-memory lookup across both published and draft items in the same group. Referenced records cannot be deleted; a song must keep one arrangement. A referenced arrangement cannot switch major/minor mode and invalidate existing performance keys; duplicate it instead. Edits retain IDs and existing setlist performance keys remain unchanged.
+- The production mock setlist provider wires the shared catalog's synchronous `validateReferences` into draft saves. A song/arrangement deleted after selection in an unsaved editor causes a clear save error; Publish stops after a failed save. Removing references in the normal setlist editor permits later deletion. A repository without reference-check capability fails closed for destructive song operations.
+- `ArrangementEditorScreen` handles arrangement metadata/presets and a basic raw text field. `openChordProEditor(context, source)` opens `BasicChordProEditorScreen` and returns draft text; only Save Arrangement (or creating the new song) persists it. This typed navigation boundary is ready for Phase 3B's advanced full-screen editor, which is not implemented. Source/key metadata may intentionally differ; rendering keeps its existing source-key precedence.
+- Success/error snackbars and form validation provide feedback; newer arrangement-operation feedback replaces earlier snackbars. Data remains in memory for the provider/container lifetime, without account sync or durable storage. The mock membership/session checks are application safeguards, not a deployed backend security system.
+
 ## Development roadmap (planned)
 
-The current foundation is the mock-backed UI above. Code comments and UI messages anticipate Firebase authentication/data integration, real group join/create and song writes, account sync/offline persistence, advanced notation/playback features and Live functionality. The Phase 2A engine and Phase 2B shared renderer/explicit grid foundation are implemented above. Generated Firebase options and `firebase_core` exist, but bootstrap does not call `Firebase.initializeApp`; backend integration and Live functionality remain unimplemented; Rehearsal navigation and chart rendering are implemented. Phase labels in comments/messages vary and are not a delivery schedule.
+The current foundation is the mock-backed UI above. Code comments and UI messages anticipate Firebase authentication/data integration, real group join/create and persistent song writes, account sync/offline persistence, advanced notation/playback features and Live functionality. The Phase 2A engine, Phase 2B renderer/explicit grids and Phase 3A in-memory song CRUD are implemented above. Generated Firebase options and `firebase_core` exist, but bootstrap does not call `Firebase.initializeApp`; backend integration and Live functionality remain unimplemented; Rehearsal navigation and chart rendering are implemented. Phase labels in comments/messages vary and are not a delivery schedule.
 
 ## Known limitations
 
 - No durable storage, backend authorization, real Google authentication, notifications, account sync, or offline cache. Publishing only updates memory, despite notification wording in a confirmation dialog.
 - Mock group/setlist changes last only for the repository instance; sign-out does not explicitly reset those repositories. Profile updates through the controller affect session state only; profile fields have no editing UI.
-- Song creation/save, group join/create, advanced notation/playback and Live functionality remain incomplete. Timing support is limited to the explicit grid syntax above; untimed lyric chords never acquire inferred durations. Chart preferences and personal offsets remain in memory.
+- Group join/create, persistent backend integration, advanced ChordPro editing/notation/playback and Live functionality remain incomplete. Timing support is limited to the explicit grid syntax above; untimed lyric chords never acquire inferred durations. Chart preferences and personal offsets remain in memory.
 - Missing setlists have a details fallback, but opening the editor with an unknown ID leaves its loading screen active. Draft-only songs are absent from published details until publishing.
-- `test/anchored_lyric_line_test.dart` covers minimal spacing, adjacent/mid-word/slash chords, word/grapheme wrapping, typography/width changes, transposition and unchanged canonical anchors. `test/floating_sections_test.dart` covers immediate jumps, repeated occurrence identity, scroll highlighting, fixed overlay positioning, state-preserving visibility, safe areas and independent scrolling on narrow/scaled and landscape-sized layouts. `test/chord_chart_view_test.dart` covers anchor alignment/collision lanes, wrapping, narrow/scaled layouts, three modes, transformations, timing rendering, repeated-section navigation and personal controls. `test/timing_grid_test.dart` covers meters/subdivisions, association, changes/sustains, markers, mismatches, validation and grid transformations. `test/chordpro_engine_test.dart` covers parsing, exact anchors, metadata/directives, grids, malformed input, transposition/spelling, Nashville, display modes and every mock arrangement/setlist item. `test/rehearsal_test.dart` covers direct card navigation, first-song order, drawer/swipe selection, scroll reset, section navigation, draft permissions, editor reuse, management deletion refresh, empty/missing setlists and missing arrangements. No integration tests exist. The declared Flutter lower bound does not guarantee compatibility with current API usage.
+- `test/song_repository_test.dart` covers CRUD, validation, permissions, group isolation, canonical text/ID preservation and published/draft reference safety. `test/song_management_test.dart` covers the forms, basic source navigation, route/membership guards, filtering, setlist selection, reactive Rehearsal resolution and failed-publish handling. `test/anchored_lyric_line_test.dart` covers minimal spacing, adjacent/mid-word/slash chords, word/grapheme wrapping, typography/width changes, transposition and unchanged canonical anchors. `test/floating_sections_test.dart` covers immediate jumps, repeated occurrence identity, scroll highlighting, fixed overlay positioning, state-preserving visibility, safe areas and independent scrolling on narrow/scaled and landscape-sized layouts. `test/chord_chart_view_test.dart` covers anchor alignment/collision lanes, wrapping, narrow/scaled layouts, three modes, transformations, timing rendering, repeated-section navigation and personal controls. `test/timing_grid_test.dart` covers meters/subdivisions, association, changes/sustains, markers, mismatches, validation and grid transformations. `test/chordpro_engine_test.dart` covers parsing, exact anchors, metadata/directives, grids, malformed input, transposition/spelling, Nashville, display modes and every mock arrangement/setlist item. `test/rehearsal_test.dart` covers direct card navigation, first-song order, drawer/swipe selection, scroll reset, section navigation, draft permissions, editor reuse, management deletion refresh, empty/missing setlists and missing arrangements. No integration tests exist. The declared Flutter lower bound does not guarantee compatibility with current API usage.
 
 ## File map
 
@@ -180,11 +191,14 @@ Paths below are relative to `lib/`; every Dart file with non-whitespace content 
 | features/groups/data/ | `group_repository.dart`: contract; `mock_group_repository.dart`: streams/role mutation/stub join/create |
 | features/groups/providers/ | `group_providers.dart`: repository, groups, membership and role providers |
 | features/groups/screens/ | `group_selection_screen.dart`: selection/stub join-create/DEV controls; `group_members_screen.dart`: member list/role changes |
-| features/setlists/data/ | `setlist_repository.dart`: contract; `mock_setlist_repository.dart`: in-memory stream/CRUD/draft/publish |
+| features/setlists/data/ | `setlist_repository.dart`: contract; `mock_setlist_repository.dart`: in-memory stream/CRUD/draft/publish and live song-reference guards |
 | features/setlists/providers/ | `setlist_providers.dart`: repository/detail/list/filter/next-service providers |
 | features/setlists/screens/ | `setlists_screen.dart`: list/create/refresh; `setlist_details_screen.dart`: published details/actions; `setlist_editor_screen.dart`: metadata/song ordering/draft/publish/item configuration |
 | features/setlists/widgets/ | `setlist_card.dart`: service summary/navigation; `setlist_filter_bar.dart`: filters; `upcoming_service_card.dart`: next-service summary |
-| features/songs/screens/ | `song_library_screen.dart`: search/category list; `song_details_screen.dart`: arrangements/raw source; `song_editor_screen.dart`: fields/stub save |
+| features/songs/data/ | `song_repository.dart`: scoped contract/session/error types; `mock_song_repository.dart`: authorized operations and shared immutable catalog; `song_validation.dart`: form/repository validation |
+| features/songs/providers/ | `song_catalog_provider.dart`: shared catalog lifetime; `song_providers.dart`: repository, scoped stream/lookups and permissions |
+| features/songs/screens/ | `song_library_screen.dart`: reactive search/category list; `song_details_screen.dart`: metadata/arrangement actions/source; `song_editor_screen.dart`: song form/arrangement management; `arrangement_editor_screen.dart`: metadata/presets/basic source form; `basic_chordpro_editor_screen.dart`: typed draft-source navigation boundary |
+| features/songs/widgets/ | `chordpro_source_field.dart`: basic source field/editor entry; `song_action_helpers.dart`: delete confirmation and feedback |
 | features/charts/models/ | `chart_document.dart`: immutable chart/anchor/directive and display projection types; `chord_symbol.dart`: note/key/chord parsing, spelling and degree conversion |
 | features/charts/data/ | `chordpro_parser.dart`: source parsing; `timing_grid_parser.dart`: optional explicit-grid attachment/validation; `chart_transformer.dart`: transposition/display/preparation API; `source_chart_adapter.dart`: existing display-only section grouping |
 | features/charts/widgets/ | `chord_chart_view.dart`: shared continuous renderer, measures and floating parsed-section navigation; `anchored_lyric_line.dart`: measured horizontal lyric expansion, safe wrapping and coincident-anchor fallback lanes; `source_chart_view.dart`: retained legacy preview |
@@ -192,4 +206,4 @@ Paths below are relative to `lib/`; every Dart file with non-whitespace content 
 | features/rehearsal/screens/ | `rehearsal_screen.dart`: async loading/fallbacks, selected song, toolbar, song drawer and swipe navigation |
 | features/profile/screens/ | `profile_screen.dart`: profile/preferences/session actions; `chart_settings_screen.dart`: settings controller/provider and preference controls |
 
-Whitespace-only placeholders excluded from the inventory: `core/widgets/{app_scaffold,empty_state,loading_overlay,primary_button,role_selector_sheet,section_header,status_chip}.dart`, `features/songs/data/song_repository.dart`, `features/songs/providers/song_providers.dart`, `features/songs/widgets/song_card.dart`, `features/live/screens/live_performance_screen.dart`.
+Whitespace-only placeholders excluded from the inventory: `core/widgets/{app_scaffold,empty_state,loading_overlay,primary_button,role_selector_sheet,section_header,status_chip}.dart`, `features/songs/widgets/song_card.dart`, `features/live/screens/live_performance_screen.dart`.

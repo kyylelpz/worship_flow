@@ -5,8 +5,12 @@ import '../../../core/models/setlist.dart';
 import '../../../core/models/setlist_item.dart';
 import 'setlist_repository.dart';
 
-class MockSetlistRepository implements SetlistRepository {
-  MockSetlistRepository({this.delay = const Duration(milliseconds: 250)});
+class MockSetlistRepository
+    implements SetlistRepository, SetlistSongReferences {
+  MockSetlistRepository(
+      {this.delay = const Duration(milliseconds: 250), this.validateItems});
+
+  final void Function(String groupId, List<SetlistItem> items)? validateItems;
 
   final Duration delay;
 
@@ -70,6 +74,7 @@ class MockSetlistRepository implements SetlistRepository {
     await Future<void>.delayed(delay);
     final idx = _setlists.indexWhere((s) => s.id == setlistId);
     if (idx == -1) return;
+    validateItems?.call(_setlists[idx].groupId, items);
     _setlists[idx] = _setlists[idx].copyWith(
       draftItems: List<SetlistItem>.unmodifiable(items),
     );
@@ -135,6 +140,15 @@ class MockSetlistRepository implements SetlistRepository {
     _setlists.removeWhere((s) => s.id == setlistId);
     _emit();
   }
+
+  @override
+  bool referencesSong(String groupId, String songId, {String? arrangementId}) =>
+      _setlists.where((s) => s.groupId == groupId).any((s) => [
+            ...s.publishedItems,
+            ...?s.draftItems
+          ].any((item) =>
+              item.songId == songId &&
+              (arrangementId == null || item.arrangementId == arrangementId)));
 
   void dispose() {
     _controller.close();

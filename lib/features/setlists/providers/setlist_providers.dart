@@ -1,13 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/setlist.dart';
+import '../../songs/providers/song_catalog_provider.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/mock_setlist_repository.dart';
 import '../data/setlist_repository.dart';
 
 /// Swap for FirestoreSetlistRepository in Phase 2.
 final setlistRepositoryProvider = Provider<SetlistRepository>((ref) {
-  final repo = MockSetlistRepository();
+  final repo = MockSetlistRepository(
+      validateItems: ref.watch(songCatalogProvider).validateReferences);
   ref.onDispose(repo.dispose);
   return repo;
 });

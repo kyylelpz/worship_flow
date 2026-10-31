@@ -10,6 +10,7 @@ abstract final class RoutePaths {
   static const String setlistLive = '/setlists/:setlistId/live';
 
   static const String songs = '/songs';
+  static const String songCreate = '/songs/new';
   static const String songDetails = '/songs/:songId';
   static const String songEditor = '/songs/:songId/edit';
 

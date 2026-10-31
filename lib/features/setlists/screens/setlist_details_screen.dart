@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/mock_data/mock_songs.dart';
+import '../../songs/providers/song_providers.dart';
 import '../../../core/models/setlist.dart';
 import '../../../core/models/setlist_item.dart';
 import '../../../core/models/song.dart';
@@ -57,7 +57,7 @@ class _DetailsBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final items = setlist.displayItems;
-    final songsById = {for (final s in mockSongs) s.id: s};
+    final songsById = {for (final s in ref.watch(songsListProvider)) s.id: s};
 
     return Scaffold(
       appBar: AppBar(
