@@ -293,11 +293,6 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                   },
                 ),
                 const SizedBox(width: 8),
-                FilterChip(
-                    label: const Text('Nashville'),
-                    selected: settings.useNashville,
-                    onSelected: (value) => settingsController
-                        .update((s) => s.copyWith(useNashville: value))),
                 IconButton(
                     tooltip: 'Transpose down',
                     icon: const Icon(Icons.remove),

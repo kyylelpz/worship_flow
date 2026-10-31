@@ -45,8 +45,8 @@ class ChartSettings {
 
 enum ChartDisplayMode {
   lyricsAndChords('Lyrics + Chords'),
-  chordsOnly('Chords Only'),
-  lyricsOnly('Lyrics Only');
+  chordsOnly('Chords'),
+  lyricsOnly('Lyrics');
 
   const ChartDisplayMode(this.label);
   final String label;
