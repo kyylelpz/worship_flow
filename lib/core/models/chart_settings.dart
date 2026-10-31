@@ -1,6 +1,6 @@
 class ChartSettings {
   const ChartSettings({
-    this.lyricsFontSize = 18,
+    this.lyricsFontSize = 16,
     this.chordsFontSize = 20,
     this.sectionHeaderFontSize = 22,
     this.globalScale = 1.0,

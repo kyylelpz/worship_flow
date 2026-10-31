@@ -38,8 +38,7 @@ Future<void> showChart(
 }
 
 void main() {
-  testWidgets(
-      'labels use measured lyric caret anchors and stack without overlap',
+  testWidgets('coincident chords retain lanes and align to lyric segments',
       (tester) async {
     const source = '[Cmaj7][D/F#]Hello [G]world';
     final line = engine
@@ -62,22 +61,12 @@ void main() {
     final a = tester.getRect(find.byKey(const ValueKey('chord-1-0')));
     final b = tester.getRect(find.byKey(const ValueKey('chord-1-1')));
     final c = tester.getRect(find.byKey(const ValueKey('chord-1-2')));
-    final origin = tester.getTopLeft(find.byType(AnchoredLyricLine));
-    final painter = TextPainter(
-        text: TextSpan(
-            text: 'Hello world',
-            style: DefaultTextStyle.of(
-                    tester.element(find.byType(AnchoredLyricLine)))
-                .style
-                .merge(lyricStyle)),
-        textDirection: TextDirection.ltr)
-      ..layout(maxWidth: 300);
-    final expectedX =
-        painter.getOffsetForCaret(const TextPosition(offset: 6), Rect.zero).dx;
-    painter.dispose();
     expect(a.left, b.left);
     expect(a.overlaps(b), isFalse);
-    expect(c.left - origin.dx, closeTo(expectedX, .1));
+    expect(
+        a.left, tester.getTopLeft(find.byKey(const ValueKey('lyric-1-0'))).dx);
+    expect(
+        c.left, tester.getTopLeft(find.byKey(const ValueKey('lyric-1-6'))).dx);
     expect(tester.takeException(), isNull);
   });
 
