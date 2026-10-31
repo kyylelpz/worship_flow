@@ -21,6 +21,15 @@ class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
   late final _searchController =
       TextEditingController(text: ref.read(_songSearchProvider));
 
+  void _backToSetlists() {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+    } else {
+      router.go(RoutePaths.setlists);
+    }
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -52,95 +61,104 @@ class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
       return matchesQuery && matchesCategory;
     }).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Song Library'),
-        actions: [
-          if (canEdit)
-            IconButton(
-              tooltip: 'New Song',
-              icon: const Icon(Icons.add_rounded),
-              onPressed: () => context.push(RoutePaths.songCreate),
-            ),
-        ],
-      ),
-      body: asyncSongs.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : asyncSongs.hasError
-              ? Center(child: Text('Could not load songs: ${asyncSongs.error}'))
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                  children: [
-                    TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search by title or artist',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        suffixIcon: query.isEmpty
-                            ? null
-                            : IconButton(
-                                icon: const Icon(Icons.close_rounded),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  ref.read(_songSearchProvider.notifier).state =
-                                      '';
-                                },
-                              ),
-                      ),
-                      onChanged: (v) =>
-                          ref.read(_songSearchProvider.notifier).state = v,
-                    ),
-                    const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _CategoryChip(
-                            label: 'All',
-                            selected: selectedCategory == null,
-                            onTap: () => ref
-                                .read(_songCategoryProvider.notifier)
-                                .state = null,
-                          ),
-                          const SizedBox(width: 8),
-                          for (final c in categories) ...[
-                            _CategoryChip(
-                              label: c,
-                              selected: selectedCategory == c,
-                              onTap: () => ref
-                                  .read(_songCategoryProvider.notifier)
-                                  .state = c,
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (filtered.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 40),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.search_off_rounded,
-                              size: 48,
-                              color: AppColors.lightSecondaryText,
-                            ),
-                            const SizedBox(height: 12),
-                            Text('No songs found',
-                                style: theme.textTheme.titleMedium),
-                          ],
-                        ),
-                      )
-                    else
-                      for (final s in filtered) ...[
-                        _SongListTile(song: s),
-                        const SizedBox(height: 10),
-                      ],
-                  ],
+    return PopScope(
+        // Use this page's history, not a pushed editor's history above it.
+        canPop: ModalRoute.of(context)?.canPop ?? false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _backToSetlists();
+        },
+        child: Scaffold(
+          appBar: AppBar(
+            leading: BackButton(onPressed: _backToSetlists),
+            title: const Text('Song Library'),
+            actions: [
+              if (canEdit)
+                IconButton(
+                  tooltip: 'New Song',
+                  icon: const Icon(Icons.add_rounded),
+                  onPressed: () => context.push(RoutePaths.songCreate),
                 ),
-    );
+            ],
+          ),
+          body: asyncSongs.isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : asyncSongs.hasError
+                  ? Center(
+                      child: Text('Could not load songs: ${asyncSongs.error}'))
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                      children: [
+                        TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search by title or artist',
+                            prefixIcon: const Icon(Icons.search_rounded),
+                            suffixIcon: query.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.close_rounded),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      ref
+                                          .read(_songSearchProvider.notifier)
+                                          .state = '';
+                                    },
+                                  ),
+                          ),
+                          onChanged: (v) =>
+                              ref.read(_songSearchProvider.notifier).state = v,
+                        ),
+                        const SizedBox(height: 12),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _CategoryChip(
+                                label: 'All',
+                                selected: selectedCategory == null,
+                                onTap: () => ref
+                                    .read(_songCategoryProvider.notifier)
+                                    .state = null,
+                              ),
+                              const SizedBox(width: 8),
+                              for (final c in categories) ...[
+                                _CategoryChip(
+                                  label: c,
+                                  selected: selectedCategory == c,
+                                  onTap: () => ref
+                                      .read(_songCategoryProvider.notifier)
+                                      .state = c,
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        if (filtered.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.search_off_rounded,
+                                  size: 48,
+                                  color: AppColors.lightSecondaryText,
+                                ),
+                                const SizedBox(height: 12),
+                                Text('No songs found',
+                                    style: theme.textTheme.titleMedium),
+                              ],
+                            ),
+                          )
+                        else
+                          for (final s in filtered) ...[
+                            _SongListTile(song: s),
+                            const SizedBox(height: 10),
+                          ],
+                      ],
+                    ),
+        ));
   }
 }
 

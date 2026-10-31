@@ -76,6 +76,11 @@ void main() {
         .read(songsListProvider)
         .singleWhere((s) => s.title == 'Created in UI');
     expect(created.primaryArrangement.chordProSource, data.originalSource);
+    expect(find.byType(SongLibraryScreen), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Created in UI');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Created in UI').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Edit'));
     await tester.pumpAndSettle();
     await enter(tester, 'Title', 'Renamed in UI');
@@ -104,6 +109,8 @@ void main() {
     final container = await launch(tester, route: '/songs/song-1/edit');
     final original =
         container.read(songByIdProvider('song-1'))!.primaryArrangement;
+    await tester.ensureVisible(find.byTooltip('Manage Acoustic'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Manage Acoustic'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Duplicate'));
@@ -114,13 +121,16 @@ void main() {
             .arrangements
             .any((a) => a.name == 'Acoustic (Copy)'),
         isTrue);
-    await tester.scrollUntilVisible(find.text('Acoustic (Copy)'), 150,
+    await tester.scrollUntilVisible(
+        find.byTooltip('Manage Acoustic (Copy)'), 150,
         scrollable: find
             .descendant(
                 of: find.byType(SongEditorScreen),
                 matching: find.byType(Scrollable))
             .first);
     expect(find.text('Acoustic (Copy)'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Manage Acoustic (Copy)'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Manage Acoustic (Copy)'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,11 +33,85 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
   final List<Arrangement> _draftArrangements = [];
   bool _favorite = false, _loaded = false, _saving = false;
   String? _error;
+  (String, String, String, String, bool)? _initialMetadata;
+  bool _allowExit = false, _leaving = false;
+  (String, String, String, String, bool) get _metadata =>
+      (_title.text, _artist.text, _category.text, _key.text, _favorite);
+  bool get _hasUnsavedChanges =>
+      _loaded &&
+      (_metadata != _initialMetadata ||
+          (widget.songId.isEmpty && _draftArrangements.isNotEmpty));
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in [_title, _artist, _category, _key]) {
+      controller.addListener(_metadataChanged);
+    }
+  }
+
+  void _metadataChanged() {
+    if (_loaded && mounted) setState(() {});
+  }
+
+  Future<void> _requestBack() async {
+    if (_saving || _leaving) return;
+    _leaving = true;
+    final discard = !_hasUnsavedChanges ||
+        await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Discard changes?'),
+                content: const Text('You have unsaved song changes.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Keep editing')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Discard')),
+                ],
+              ),
+            ) ==
+            true;
+    if (!mounted) return;
+    if (!discard) {
+      _leaving = false;
+      return;
+    }
+    // Rebuild PopScope before popping so confirmed Android Back is not blocked.
+    setState(() => _allowExit = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final router = GoRouter.of(context);
+      if (router.canPop()) {
+        router.pop();
+      } else {
+        router.go(RoutePaths.songs);
+      }
+    });
+  }
+
+  Widget _backButton() => IconButton(
+      tooltip: 'Back',
+      icon: const Icon(Icons.arrow_back),
+      onPressed: _saving ? null : _requestBack);
+  Widget _guardBack(Widget child) => PopScope(
+        canPop: (_allowExit || (!_hasUnsavedChanges && !_saving)) &&
+            GoRouter.of(context).canPop(),
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) unawaited(_requestBack());
+        },
+        child: child,
+      );
+
   @override
   void didUpdateWidget(SongEditorScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.songId != widget.songId) {
       _loaded = false;
+      _initialMetadata = null;
+      _allowExit = false;
       _error = null;
       _draftArrangements.clear();
       _title.clear();
@@ -85,7 +161,21 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
       }
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Song saved.')));
-      context.go(RoutePaths.songDetailsFor(id));
+      setState(() => _allowExit = true);
+      if (existing == null) {
+        // Let PopScope rebuild before popping back to the existing library.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final router = GoRouter.of(context);
+          if (router.canPop()) {
+            router.pop();
+          } else {
+            router.go(RoutePaths.songs);
+          }
+        });
+      } else {
+        context.go(RoutePaths.songDetailsFor(id));
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _error = '$error');
@@ -173,21 +263,21 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
         ? null
         : ref.watch(songByIdProvider(widget.songId));
     if (loading) {
-      return Scaffold(
-          appBar: AppBar(),
-          body: const Center(child: CircularProgressIndicator()));
+      return _guardBack(Scaffold(
+          appBar: AppBar(leading: _backButton()),
+          body: const Center(child: CircularProgressIndicator())));
     }
     if (!canEdit || _groupId == null) {
-      return Scaffold(
-          appBar: AppBar(),
+      return _guardBack(Scaffold(
+          appBar: AppBar(leading: _backButton()),
           body: const Center(
               child: Text(
-                  'Song management permission is required. Reopen the editor after switching groups.')));
+                  'Song management permission is required. Reopen the editor after switching groups.'))));
     }
     if (widget.songId.isNotEmpty && song == null) {
-      return Scaffold(
-          appBar: AppBar(),
-          body: const Center(child: Text('Song not found in this group.')));
+      return _guardBack(Scaffold(
+          appBar: AppBar(leading: _backButton()),
+          body: const Center(child: Text('Song not found in this group.'))));
     }
     if (!_loaded) {
       if (song != null) {
@@ -197,11 +287,13 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
         _key.text = song.defaultKey;
         _favorite = song.isFavorite;
       }
+      _initialMetadata = _metadata;
       _loaded = true;
     }
     final arrangements = song?.arrangements ?? _draftArrangements;
-    return Scaffold(
+    return _guardBack(Scaffold(
       appBar: AppBar(
+          leading: _backButton(),
           title: Text(song == null ? 'New Song' : 'Edit Song'),
           actions: [
             TextButton(
@@ -270,6 +362,6 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Arrangement')),
           ])),
-    );
+    ));
   }
 }
