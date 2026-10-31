@@ -20,6 +20,37 @@ class ChordProParser {
     }
 
     final input = source.split(RegExp(r'\r\n|\n|\r'));
+    final keyDirective =
+        RegExp(r'^\s*\{(?:key|k):\s*(.*?)\}\s*$', caseSensitive: false);
+    final sourceKey = input
+        .map(keyDirective.firstMatch)
+        .whereType<RegExpMatch>()
+        .map((m) => MusicalKey.tryParse(m[1]!))
+        .firstOrNull;
+    final warnings = <String>[];
+    ChordSymbol? parseChord(String token, {bool warn = true}) {
+      final letter = ChordSymbol.tryParse(token);
+      if (letter != null) return letter;
+      if (!RegExp(r'^[#b♯♭]*[0-9]').hasMatch(token)) return null;
+      final numbered = ChordSymbol.tryParseNumbered(
+          token, sourceKey ?? const MusicalKey(NoteName('C', 0)));
+      if (numbered == null) {
+        if (warn) {
+          warnings.add(
+              'Unsupported or ambiguous numbered chord "$token"; preserved literally.');
+        }
+        return null;
+      }
+      if (sourceKey == null) {
+        if (warn) {
+          warnings.add(
+              'Numbered chord "$token" requires a valid source {key}; preserved literally.');
+        }
+        return null;
+      }
+      return numbered;
+    }
+
     for (var i = 0; i < input.length; i++) {
       final raw = input[i];
       final match =
@@ -58,7 +89,7 @@ class ChordProParser {
             kind: ChartLineKind.tablature,
             text: raw));
       } else {
-        lines.add(_parseLine(raw, i + 1));
+        lines.add(_parseLine(raw, i + 1, parseChord));
       }
     }
     flush();
@@ -67,11 +98,13 @@ class ChordProParser {
             source: source,
             sections: sections,
             metadata: metadata,
+            warnings: warnings.toSet(),
             key: MusicalKey.tryParse(metadata['key']?.firstOrNull ?? '')),
         defaultMeter: defaultTimeSignature);
   }
 
-  ChartLine _parseLine(String raw, int number) {
+  ChartLine _parseLine(String raw, int number,
+      ChordSymbol? Function(String, {bool warn}) parseChord) {
     if (raw.trim().isEmpty) {
       return ChartLine(
           source: raw,
@@ -79,7 +112,8 @@ class ChordProParser {
           kind: ChartLineKind.blank,
           text: raw);
     }
-    if (raw.trimLeft().startsWith('#')) {
+    if (raw.trimLeft().startsWith('#') &&
+        !RegExp(r'^#[#♯]?[1-7]').hasMatch(raw.trimLeft())) {
       return ChartLine(
           source: raw,
           sourceLine: number,
@@ -100,7 +134,7 @@ class ChordProParser {
     }
 
     final symbols =
-        tokens.map((m) => ChordSymbol.tryParse(tokenText(m))).toList();
+        tokens.map((m) => parseChord(tokenText(m), warn: false)).toList();
     const layoutTokens = ['%', '.', '-', '/', 'N.C.', 'NC'];
     final isGrid = tokens.isNotEmpty &&
         tokens.asMap().entries.every((entry) =>
@@ -136,13 +170,33 @@ class ChordProParser {
           text: token,
           offset: lyric.length,
           sourceOffset: match.start,
-          symbol: ChordSymbol.tryParse(token)));
+          symbol: parseChord(token)));
       cursor = match.end;
     }
     if (chords.isNotEmpty) {
       lyric.write(raw.substring(cursor));
       final text = lyric.toString();
       final onlyChords = RegExp(r'^[\s|:%./\-]*$').hasMatch(text);
+      if (onlyChords) {
+        final layout = raw.split('');
+        final anchored = <AnchoredChord>[];
+        for (final match in RegExp(r'\[([^\[\]\r\n]+)\]').allMatches(raw)) {
+          anchored.add(AnchoredChord(
+              text: match[1]!,
+              offset: match.start,
+              sourceOffset: match.start,
+              symbol: parseChord(match[1]!)));
+          for (var column = match.start; column < match.end; column++) {
+            layout[column] = ' ';
+          }
+        }
+        return ChartLine(
+            source: raw,
+            sourceLine: number,
+            kind: ChartLineKind.chords,
+            text: layout.join(),
+            chords: anchored);
+      }
       return ChartLine(
           source: raw,
           sourceLine: number,

@@ -137,13 +137,16 @@ int signedDistance(int value) => (value + 6) % 12 - 6;
 
 /// Supported chord suffixes are preserved literally, not reharmonized.
 class ChordSymbol {
-  const ChordSymbol(this.root, this.quality, [this.bass, this.rootDegree, this.bassDegree]);
+  const ChordSymbol(this.root, this.quality,
+      [this.bass, this.rootDegree, this.bassDegree, this.degreeKey]);
   final NoteName root;
   final String quality;
   final NoteName? bass;
+
   /// Original relative spelling survives same-mode transposition.
   final String? rootDegree;
   final String? bassDegree;
+  final String? degreeKey;
   String get name =>
       '${root.name}$quality${bass == null ? '' : '/${bass!.name}'}';
 
@@ -186,8 +189,20 @@ class ChordSymbol {
       suffix = suffix.substring(0, slash.start);
     }
     if (suffix.contains('/') ||
-        (suffix.isNotEmpty && RegExp(r'^\d').hasMatch(suffix) &&
-            !RegExp(r'^(?:7|9|11|13)(?:$|[^0-9])').hasMatch(suffix))) {
+        (suffix.isNotEmpty &&
+            RegExp(r'^\d').hasMatch(suffix) &&
+            !RegExp(r'^(?:2|4|5|6|7|9|11|13)(?:$|[^0-9])').hasMatch(suffix)) ||
+        RegExp(r'\d+').allMatches(suffix).any((m) => !const [
+              '2',
+              '3',
+              '4',
+              '5',
+              '6',
+              '7',
+              '9',
+              '11',
+              '13'
+            ].contains(m[0]))) {
       return null;
     }
     final parsed = tryParse('C$suffix');
@@ -198,18 +213,34 @@ class ChordSymbol {
       for (final code in degree.substring(0, degree.length - 1).runes) {
         alteration += code == 35 || code == 0x266f ? 1 : -1;
       }
-      return key.spell(key.tonic.pitch + key.intervals[index] + alteration);
+      final pitch = (key.tonic.pitch + key.intervals[index] + alteration) % 12;
+      final note = key.spell(pitch);
+      if (alteration < 0 && note.accidental > 0) {
+        final letter =
+            NoteName.letters[(NoteName.letters.indexOf(note.letter) + 1) % 7];
+        return NoteName(
+            letter, signedDistance(pitch - NoteName(letter, 0).pitch));
+      }
+      return note;
     }
-    return ChordSymbol(resolve(match[1]!), suffix,
-        bassDegree == null ? null : resolve(bassDegree), match[1], bassDegree);
+
+    return ChordSymbol(
+        resolve(match[1]!),
+        suffix,
+        bassDegree == null ? null : resolve(bassDegree),
+        match[1],
+        bassDegree,
+        key.name);
   }
 
   ChordSymbol transpose(int semitones, MusicalKey spelling) => ChordSymbol(
       spelling.spell(root.pitch + semitones),
       quality,
       bass == null ? null : spelling.spell(bass!.pitch + semitones),
-      rootDegree, bassDegree);
+      rootDegree,
+      bassDegree,
+      rootDegree == null ? null : spelling.name);
 
   String nashville(MusicalKey key) =>
-      '${rootDegree ?? key.degree(root)}$quality${bass == null ? '' : '/${bassDegree ?? key.degree(bass!)}'}';
+      '${degreeKey == key.name ? rootDegree : key.degree(root)}$quality${bass == null ? '' : '/${degreeKey == key.name ? bassDegree : key.degree(bass!)}'}';
 }

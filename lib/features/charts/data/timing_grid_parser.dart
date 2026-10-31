@@ -5,7 +5,7 @@ import '../models/chord_symbol.dart';
 ChartDocument attachTimingGrids(ChartDocument document,
     {String? defaultMeter}) {
   final grids = <TimingGrid>[];
-  final warnings = <String>[];
+  final warnings = <String>[...document.warnings];
   var meter = defaultMeter?.trim() ?? '4/4';
   var subdivision = 1;
   final gridSections = document.sections
@@ -74,7 +74,10 @@ ChartDocument attachTimingGrids(ChartDocument document,
             final name = text.startsWith('[') && text.endsWith(']')
                 ? text.substring(1, text.length - 1)
                 : text;
-            final symbol = ChordSymbol.tryParse(name);
+            final symbol = ChordSymbol.tryParse(name) ??
+                (document.key == null
+                    ? null
+                    : ChordSymbol.tryParseNumbered(name, document.key!));
             if (symbol == null) {
               warnings.add('${section.label}: unsupported grid token "$text".');
               valid = false;

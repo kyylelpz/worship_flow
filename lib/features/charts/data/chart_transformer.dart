@@ -90,7 +90,9 @@ class ChartTransformer {
                               : settings.useNashville &&
                                       slot.chord?.symbol != null
                                   ? slot.chord!.symbol!.nashville(context!)
-                                  : slot.chord?.text ?? '?'))
+                                  : slot.chord?.symbol?.rootDegree != null
+                                      ? slot.chord!.symbol!.name
+                                      : slot.chord?.text ?? '?'))
                       .toList()),
                 ))
             : const [],
@@ -111,7 +113,9 @@ class ChartTransformer {
                         ? line.chords.map((chord) => DisplayChord(
                               settings.useNashville && chord.symbol != null
                                   ? chord.symbol!.nashville(context!)
-                                  : chord.text,
+                                  : chord.symbol?.rootDegree != null
+                                      ? chord.symbol!.name
+                                      : chord.text,
                               chord.offset,
                             ))
                         : const [],

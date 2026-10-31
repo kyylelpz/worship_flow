@@ -127,6 +127,33 @@ class _ChordChartViewState extends State<ChordChartView> {
     for (final section in sections) {
       _anchors.putIfAbsent(section.id, () => GlobalKey());
     }
+    Widget instrumental(DisplayChartLine line) {
+      final parts = <Widget>[];
+      var cursor = 0;
+      final raw = line.original.source;
+      void markers(String text) {
+        if (text.isNotEmpty) {
+          parts.add(
+              Text(text, style: chordStyle.copyWith(fontFamily: 'monospace')));
+        }
+      }
+
+      for (var i = 0; i < line.chords.length; i++) {
+        final original = line.original.chords[i];
+        final start = original.sourceOffset;
+        markers(raw.substring(cursor, start));
+        parts.add(ChordLabel(line.chords[i].text, style: chordStyle));
+        final token =
+            RegExp(r'^\[[^\[\]]+\]|^[^\s|:]+').firstMatch(raw.substring(start));
+        cursor = start + token!.end;
+      }
+      markers(raw.substring(cursor));
+      return Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          runSpacing: 12,
+          children: parts);
+    }
+
     Widget sequence(Iterable<DisplayChartLine> lines) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -136,6 +163,10 @@ class _ChordChartViewState extends State<ChordChartView> {
                     height: MediaQuery.textScalerOf(context)
                             .scale(lyricStyle.fontSize!) *
                         settings.lineSpacing)
+              else if (line.layout != null)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: instrumental(line))
               else if (line.chords.isNotEmpty)
                 Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -278,7 +309,7 @@ class _ChordChartViewState extends State<ChordChartView> {
                             line: line,
                             lyricStyle: lyricStyle,
                             chordStyle: chordStyle))
-              else if (line.chords.isNotEmpty)
+              else if (line.layout != null || line.chords.isNotEmpty)
                 Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: sequence([line]))
