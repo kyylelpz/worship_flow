@@ -13,7 +13,6 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
   void reset() => state = ThemeMode.light;
 }
 
-final themeModeProvider =
-    StateNotifierProvider<ThemeModeController, ThemeMode>(
+final themeModeProvider = StateNotifierProvider<ThemeModeController, ThemeMode>(
   (ref) => ThemeModeController(),
 );

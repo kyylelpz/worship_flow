@@ -142,7 +142,7 @@ const mockSongs = <Song>[
         bpm: 74,
         timeSignature: '4/4',
         chordProSource: _chordProSongOne,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Jordan', key: 'G'),
           VocalistKey(vocalistName: 'Avery', key: 'A'),
         ],
@@ -154,7 +154,7 @@ const mockSongs = <Song>[
         bpm: 72,
         timeSignature: '4/4',
         chordProSource: _chordProSongOne,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Jordan', key: 'G'),
         ],
       ),
@@ -175,7 +175,7 @@ const mockSongs = <Song>[
         bpm: 68,
         timeSignature: '4/4',
         chordProSource: _chordProSongTwo,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Jordan', key: 'D'),
           VocalistKey(vocalistName: 'Noah', key: 'E'),
         ],
@@ -197,7 +197,7 @@ const mockSongs = <Song>[
         bpm: 80,
         timeSignature: '4/4',
         chordProSource: _chordProSongThree,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Avery', key: 'C'),
         ],
       ),
@@ -218,7 +218,7 @@ const mockSongs = <Song>[
         bpm: 88,
         timeSignature: '4/4',
         chordProSource: _chordProSongFour,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Jordan', key: 'A'),
         ],
       ),
@@ -239,7 +239,7 @@ const mockSongs = <Song>[
         bpm: 72,
         timeSignature: '4/4',
         chordProSource: _chordProSongFive,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Noah', key: 'Em'),
         ],
       ),
@@ -260,7 +260,7 @@ const mockSongs = <Song>[
         bpm: 76,
         timeSignature: '4/4',
         chordProSource: _chordProSongSix,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Jordan', key: 'B'),
           VocalistKey(vocalistName: 'Avery', key: 'C'),
         ],
@@ -282,7 +282,7 @@ const mockSongs = <Song>[
         bpm: 66,
         timeSignature: '4/4',
         chordProSource: _chordProSongSeven,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Avery', key: 'F'),
         ],
       ),
@@ -303,7 +303,7 @@ const mockSongs = <Song>[
         bpm: 84,
         timeSignature: '4/4',
         chordProSource: _chordProSongEight,
-        vocalistKeys: const [
+        vocalistKeys: [
           VocalistKey(vocalistName: 'Jordan', key: 'Ab'),
         ],
       ),

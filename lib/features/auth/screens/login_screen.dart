@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/models/session_state.dart';
-import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/auth_providers.dart';
 
@@ -19,18 +17,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _handleSignIn() async {
     setState(() => _pressed = true);
-    final controller = ref.read(sessionProvider.notifier);
-    await controller.signInWithGoogle();
-
+    await ref.read(sessionProvider.notifier).signInWithGoogle();
     if (!mounted) return;
     setState(() => _pressed = false);
-
-    final session = ref.read(sessionProvider);
-    if (session.isAuthenticated && mounted) {
-      // Router will handle the redirect; nothing else needed here.
-      if (context.mounted) context.go(RoutePaths.groups);
+    // Router's redirect will navigate. No context.go needed.
     }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +30,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final isLoading = session.isLoading || _pressed;
 
     ref.listen<SessionState>(sessionProvider, (prev, next) {
-      if (next.errorMessage != null && next.errorMessage != prev?.errorMessage) {
+      if (next.errorMessage != null &&
+          next.errorMessage != prev?.errorMessage) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(next.errorMessage!)),
         );
@@ -193,6 +185,3 @@ class _GoogleGlyph extends StatelessWidget {
     );
   }
 }
-
-// Local import to avoid a circular dependency through auth_providers.
-import '../../../core/models/session_state.dart' show SessionState;

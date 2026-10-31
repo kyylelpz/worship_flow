@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/auth/providers/auth_providers.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/groups/screens/group_members_screen.dart';
 import '../../features/groups/screens/group_selection_screen.dart';
@@ -13,6 +12,7 @@ import '../../features/setlists/screens/setlists_screen.dart';
 import '../../features/songs/screens/song_details_screen.dart';
 import '../../features/songs/screens/song_editor_screen.dart';
 import '../../features/songs/screens/song_library_screen.dart';
+import '../models/session_state.dart';
 import 'route_paths.dart';
 import 'router_refresh.dart';
 
@@ -98,13 +98,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'rehearse',
-            redirect: (_, state) =>
-                RoutePaths.setlistDetailsFor(state.pathParameters['setlistId']!),
+            redirect: (_, state) => RoutePaths.setlistDetailsFor(
+                state.pathParameters['setlistId']!),
           ),
           GoRoute(
             path: 'live',
-            redirect: (_, state) =>
-                RoutePaths.setlistDetailsFor(state.pathParameters['setlistId']!),
+            redirect: (_, state) => RoutePaths.setlistDetailsFor(
+                state.pathParameters['setlistId']!),
           ),
         ],
       ),

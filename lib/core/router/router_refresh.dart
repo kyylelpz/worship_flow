@@ -1,14 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// A [Listenable] that fires whenever a watched provider changes, so GoRouter
-/// can re-evaluate redirects without the router being rebuilt entirely.
+import '../../features/auth/providers/auth_providers.dart';
+import '../models/session_state.dart';
+
+/// A [Listenable] that fires whenever the session's *routing-relevant* fields
+/// change, so GoRouter can re-evaluate redirects without rebuilding the router.
 class RouterRefresh extends ChangeNotifier {
   RouterRefresh(Ref ref) {
-    ref.listen(sessionRefreshSignalProvider, (_, __) => notifyListeners());
+    ref.listen(
+      sessionProvider,
+      (previous, next) {
+        final prevKey = _key(previous);
+        final nextKey = _key(next);
+        if (prevKey != nextKey) notifyListeners();
+      },
+    );
+  }
+
+  static String _key(SessionState? s) {
+    if (s == null) return 'null';
+    return '${s.user?.id ?? ''}|${s.selectedGroupId ?? ''}';
   }
 }
-
-/// A simple integer that any session-related controller can bump to force
-/// GoRouter's redirect to run again.
-final sessionRefreshSignalProvider = StateProvider<int>((ref) => 0);
