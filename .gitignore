@@ -1,0 +1,160 @@
+# ============================================================================
+# Worship Flow — .gitignore
+# ============================================================================
+
+# --- Dart / Flutter tooling ------------------------------------------------
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# --- Flutter/Dart generated artifacts --------------------------------------
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+*.config.dart
+*.gr.dart
+lib/generated_plugin_registrant.dart
+lib/generated_plugin_registrant.dart.lock
+devtools_options.yaml
+
+# --- iOS -------------------------------------------------------------------
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Flutter.podspec.lock
+ios/Flutter/App.framework
+ios/Flutter/Flutter.podspec.lock
+ios/Flutter/ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+ios/Runner.xcworkspace/xcuserdata/
+ios/Runner.xcworkspace/xcshareddata/
+ios/Runner.xcodeproj/xcuserdata/
+ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
+ios/**/*.xcuserstate
+
+# --- macOS (host) ----------------------------------------------------------
+macos/Pods/
+macos/.symlinks/
+macos/Flutter/ephemeral/
+macos/Flutter/Generated.xcconfig
+macos/Flutter/flutter_export_environment.sh
+macos/Runner/GeneratedPluginRegistrant.*
+macos/Runner.xcworkspace/xcuserdata/
+macos/Runner.xcworkspace/xcshareddata/
+macos/Runner.xcodeproj/xcuserdata/
+
+# --- Android ---------------------------------------------------------------
+android/.gradle/
+android/captures/
+android/local.properties
+android/key.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/.idea/
+android/*.iml
+android/.settings/
+android/.classpath
+android/.project
+android/app/google-services.json
+android/app/.cxx/
+android/build/
+android/.cxx/
+**/android/gradle/wrapper/gradle-wrapper.jar
+
+# --- Web -------------------------------------------------------------------
+web/.dart_tool/
+web/build/
+
+# --- Linux -----------------------------------------------------------------
+linux/flutter/ephemeral/
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugin_registrant.h
+linux/flutter/generated_plugins.cmake
+
+# --- Windows ---------------------------------------------------------------
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
+windows/runner/Runner.rc
+
+# --- IDE / editor ----------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+.history/
+*.swp
+*.swo
+*~
+
+# --- OS --------------------------------------------------------------------
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# --- Secrets / environment -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+secrets/
+secrets.*
+*.pem
+*.p12
+*.pfx
+
+# --- Firebase (future phases) ---------------------------------------------
+# Keep these ignored now; remove when Firebase is properly wired.
+firebase.json
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+firestore.indexes.json
+firestore.rules
+storage.rules
+google-services.json
+GoogleService-Info.plist
+lib/firebase_options.dart
+
+# --- Coverage / testing ----------------------------------------------------
+coverage/
+test/.test_coverage.dart
+*.lcov
+.test_coverage.dart
+
+# --- Logs / temp -----------------------------------------------------------
+*.log
+*.tmp
+*.bak
+.cache/
+tmp/
+
+# --- Local mock data overrides (dev only) ---------------------------------
+# Useful when testing with a persistent local mock repo; never commit.
+mock_data_local/
+*.local.dart
+
+# AI agent tooling — local only
+.agents/
+skills-lock.json
