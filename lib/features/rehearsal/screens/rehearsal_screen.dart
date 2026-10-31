@@ -75,6 +75,7 @@ class _RehearsalBody extends ConsumerStatefulWidget {
 class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
   int _selected = 0;
   double _drag = 0;
+  bool _showSections = true;
 
   @override
   void didUpdateWidget(_RehearsalBody oldWidget) {
@@ -274,44 +275,53 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
       body: Column(
         children: [
           if (arrangement != null)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            SafeArea(
+              top: false,
+              bottom: false,
               child: Row(children: [
-                const SizedBox(width: 8),
-                DropdownButton<ChartDisplayMode>(
-                  value: settings.displayMode,
-                  hint: const Text('Display mode'),
-                  items: [
-                    for (final mode in ChartDisplayMode.values)
-                      DropdownMenuItem(value: mode, child: Text(mode.label))
-                  ],
-                  onChanged: (mode) {
-                    if (mode != null) {
-                      settingsController
-                          .update((s) => s.copyWith(displayMode: mode));
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                    tooltip: 'Transpose down',
-                    icon: const Icon(Icons.remove),
-                    onPressed: personal > -12
-                        ? () => ref
-                            .read(personalTransposeProvider(arrangement.id)
-                                .notifier)
-                            .state--
-                        : null),
-                Text('$personal'),
-                IconButton(
-                    tooltip: 'Transpose up',
-                    icon: const Icon(Icons.add),
-                    onPressed: personal < 12
-                        ? () => ref
-                            .read(personalTransposeProvider(arrangement.id)
-                                .notifier)
-                            .state++
-                        : null),
+                Expanded(
+                    child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: [
+                          const SizedBox(width: 8),
+                          DropdownButton<ChartDisplayMode>(
+                            value: settings.displayMode,
+                            hint: const Text('Display mode'),
+                            items: [
+                              for (final mode in ChartDisplayMode.values)
+                                DropdownMenuItem(
+                                    value: mode, child: Text(mode.label))
+                            ],
+                            onChanged: (mode) {
+                              if (mode != null) {
+                                settingsController.update(
+                                    (s) => s.copyWith(displayMode: mode));
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                              tooltip: 'Transpose down',
+                              icon: const Icon(Icons.remove),
+                              onPressed: personal > -12
+                                  ? () => ref
+                                      .read(personalTransposeProvider(
+                                              arrangement.id)
+                                          .notifier)
+                                      .state--
+                                  : null),
+                          Text('$personal'),
+                          IconButton(
+                              tooltip: 'Transpose up',
+                              icon: const Icon(Icons.add),
+                              onPressed: personal < 12
+                                  ? () => ref
+                                      .read(personalTransposeProvider(
+                                              arrangement.id)
+                                          .notifier)
+                                      .state++
+                                  : null),
+                        ]))),
                 IconButton(
                     tooltip: 'Smaller chart text',
                     icon: const Icon(Icons.text_decrease),
@@ -326,6 +336,13 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                       settingsController.adjustLyrics(1);
                       settingsController.adjustChords(1);
                     }),
+                IconButton(
+                  tooltip: _showSections ? 'Hide Sections' : 'Show Sections',
+                  isSelected: _showSections,
+                  icon: const Icon(Icons.segment),
+                  onPressed: () =>
+                      setState(() => _showSections = !_showSections),
+                ),
               ]),
             ),
           if (!setlist.isPublished)
@@ -365,6 +382,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                             : ChordChartView(
                                 key: ValueKey(
                                     '$index-${item.songId}-${item.arrangementId}'),
+                                showSections: _showSections,
                                 chart: chart,
                                 settings: settings,
                               ),

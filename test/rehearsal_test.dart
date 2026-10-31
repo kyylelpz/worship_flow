@@ -143,12 +143,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('section rail is separate from setlist drawer', (tester) async {
+  testWidgets('floating sections are separate from setlist drawer',
+      (tester) async {
     await launch(tester, route: RoutePaths.setlistRehearsalFor('setlist-1'));
-    await tester.tap(find.byTooltip('Expand sections'));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextButton, 'Chorus'), findsOneWidget);
-    await tester.tap(find.widgetWithText(TextButton, 'Chorus'));
+    expect(find.widgetWithText(TextButton, 'CH'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'CH'));
     await tester.pumpAndSettle();
     final scroll = tester
         .widget<SingleChildScrollView>(
@@ -156,9 +155,9 @@ void main() {
         .controller!;
     expect(scroll.offset, greaterThan(0));
     expect(find.byType(Drawer), findsNothing);
-    await tester.tap(find.byTooltip('Collapse sections'));
+    await tester.tap(find.byTooltip('Hide Sections'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextButton, 'Chorus'), findsNothing);
+    expect(find.widgetWithText(TextButton, 'CH'), findsNothing);
   });
 
   testWidgets('draft-only previews are marked and management reuses editor',

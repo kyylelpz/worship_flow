@@ -105,8 +105,6 @@ void main() {
       expect(rect.left, greaterThanOrEqualTo(chartRect.left));
       expect(rect.right, lessThanOrEqualTo(chartRect.right + .1));
     }
-    await tester.tap(find.byTooltip('Expand sections'));
-    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 
@@ -179,22 +177,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'compact controls update display, notation and chart font settings',
+  testWidgets('compact controls update display and chart font settings',
       (tester) async {
     final container = await rehearsal.launch(tester,
         route: RoutePaths.setlistRehearsalFor('setlist-1'));
     await tester.tap(find.byType(DropdownButton<ChartDisplayMode>));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Chords Only').last);
+    await tester.tap(find.text(ChartDisplayMode.chordsOnly.label).last);
     await tester.pumpAndSettle();
     expect(find.byType(AnchoredLyricLine), findsNothing);
     expect(container.read(chartSettingsProvider).displayMode,
         ChartDisplayMode.chordsOnly);
-    await tester.ensureVisible(find.widgetWithText(FilterChip, 'Nashville'));
-    await tester.tap(find.widgetWithText(FilterChip, 'Nashville'));
-    await tester.pumpAndSettle();
-    expect(container.read(chartSettingsProvider).useNashville, isTrue);
     final size = container.read(chartSettingsProvider).lyricsFontSize;
     await tester.ensureVisible(find.byTooltip('Larger chart text'));
     await tester.tap(find.byTooltip('Larger chart text'));
@@ -213,10 +206,8 @@ void main() {
         tester,
         '{key: C}\n{soc: Refrain}\n[C]First\n{eoc}\n'
         '{soc: Refrain}\n[G]Second\n{eoc}');
-    await tester.tap(find.byTooltip('Expand sections'));
-    await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextButton, 'Refrain'), findsNWidgets(2));
-    await tester.tap(find.widgetWithText(TextButton, 'Refrain').last);
+    expect(find.widgetWithText(TextButton, 'RF1'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'RF2'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });

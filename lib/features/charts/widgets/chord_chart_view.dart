@@ -10,9 +10,13 @@ import 'anchored_lyric_line.dart';
 /// Navigation-independent shared chart surface for Rehearsal and future Live.
 class ChordChartView extends StatefulWidget {
   const ChordChartView(
-      {super.key, required this.chart, required this.settings});
+      {super.key,
+      required this.chart,
+      required this.settings,
+      this.showSections = true});
   final DisplayChart chart;
   final ChartSettings settings;
+  final bool showSections;
 
   @override
   State<ChordChartView> createState() => _ChordChartViewState();
@@ -21,20 +25,67 @@ class ChordChartView extends StatefulWidget {
 class _ChordChartViewState extends State<ChordChartView> {
   final _scroll = ScrollController(keepScrollOffset: false);
   final Map<String, GlobalKey> _anchors = {};
-  bool _expanded = false;
+  final _viewportKey = GlobalKey();
+  final _sectionScroll = ScrollController();
+  List<DisplayChartSection> _sections = const [];
+  String? _activeId;
+  bool _needsActiveUpdate = true;
+  Size? _lastViewportSize;
+  double? _lastTextScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_updateActive);
+  }
+
+  void _updateActive() {
+    if (!mounted || _sections.isEmpty || !_scroll.hasClients) return;
+    final viewport = _viewportKey.currentContext?.findRenderObject();
+    if (viewport is! RenderBox || !viewport.hasSize) return;
+    var active = _sections.first.id;
+    for (final section in _sections) {
+      final anchor = _anchors[section.id]?.currentContext?.findRenderObject();
+      if (anchor is RenderBox &&
+          anchor.hasSize &&
+          anchor.localToGlobal(Offset.zero, ancestor: viewport).dy <= 16) {
+        active = section.id;
+      }
+    }
+    if (_scroll.position.maxScrollExtent > 0 &&
+        _scroll.offset >= _scroll.position.maxScrollExtent - 1) {
+      active = _sections.last.id;
+    }
+    if (_activeId != active) setState(() => _activeId = active);
+  }
+
+  void _jumpTo(DisplayChartSection section) {
+    final target = _anchors[section.id]?.currentContext;
+    if (target == null) return;
+    unawaited(Scrollable.ensureVisible(target, duration: Duration.zero));
+    setState(() => _activeId = section.id);
+  }
 
   @override
   void didUpdateWidget(ChordChartView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.settings != widget.settings ||
+        oldWidget.chart.document.key?.name != widget.chart.document.key?.name) {
+      _needsActiveUpdate = true;
+    }
     if (oldWidget.chart.document.source != widget.chart.document.source) {
       _anchors.clear();
+      _activeId = null;
+      _needsActiveUpdate = true;
       if (_scroll.hasClients) _scroll.jumpTo(0);
     }
   }
 
   @override
   void dispose() {
+    _scroll.removeListener(_updateActive);
     _scroll.dispose();
+    _sectionScroll.dispose();
     super.dispose();
   }
 
@@ -67,6 +118,11 @@ class _ChordChartViewState extends State<ChordChartView> {
                 l.original.directive?.kind == DirectiveKind.comment ||
                 l.original.directive?.kind == DirectiveKind.unknown))
         .toList();
+    _sections = sections;
+    if (_needsActiveUpdate) {
+      _needsActiveUpdate = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _updateActive());
+    }
     for (final section in sections) {
       _anchors.putIfAbsent(section.id, () => GlobalKey());
     }
@@ -237,76 +293,167 @@ class _ChordChartViewState extends State<ChordChartView> {
       );
     }
 
-    return LayoutBuilder(
-        builder: (context, constraints) => Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Material(
-                  color: theme.colorScheme.surfaceContainerLow,
-                  child: SizedBox(
-                      width: _expanded
-                          ? math.min(132, constraints.maxWidth * .32)
-                          : 40,
-                      child: Column(children: [
-                        IconButton(
-                            tooltip: _expanded
-                                ? 'Collapse sections'
-                                : 'Expand sections',
-                            onPressed: () =>
-                                setState(() => _expanded = !_expanded),
-                            icon: Icon(_expanded
-                                ? Icons.chevron_left
-                                : Icons.segment)),
-                        if (_expanded)
-                          Expanded(
-                              child: ListView(children: [
+    final labels = _sectionLabels(sections);
+    return SafeArea(
+      top: false,
+      child: LayoutBuilder(builder: (context, constraints) {
+        final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+        final textScale = MediaQuery.textScalerOf(context).scale(16);
+        if (_lastViewportSize != viewportSize || _lastTextScale != textScale) {
+          _lastViewportSize = viewportSize;
+          _lastTextScale = textScale;
+          WidgetsBinding.instance.addPostFrameCallback((_) => _updateActive());
+        }
+
+        final bubbleWidth = MediaQuery.textScalerOf(context)
+            .scale(24)
+            .clamp(48.0,
+                math.max(48.0, math.min(96.0, constraints.maxWidth * .35)))
+            .toDouble();
+        return Stack(key: _viewportKey, fit: StackFit.expand, children: [
+          Scrollbar(
+            controller: _scroll,
+            child: SingleChildScrollView(
+                key: const ValueKey('chart-scroll'),
+                controller: _scroll,
+                // Keep this gutter even when hidden: toggling never reflows lyrics.
+                padding: EdgeInsets.fromLTRB(12, 12, bubbleWidth + 20, 12),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(maxWidth: settings.chartWidth),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final warning in chart.document.warnings)
+                              Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text('Chart warning: $warning',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                              color: theme.colorScheme.error))),
+                            if (sections.isEmpty)
+                              const Text('No chart content available.'),
                             for (final section in sections)
-                              TextButton(
-                                  onPressed: () {
-                                    final target =
-                                        _anchors[section.id]?.currentContext;
-                                    if (target != null) {
-                                      unawaited(Scrollable.ensureVisible(target,
-                                          duration: const Duration(
-                                              milliseconds: 200)));
-                                    }
-                                  },
-                                  child: Text(section.label)),
+                              sectionView(section),
                           ])),
-                      ])),
-                ),
-                Expanded(
-                    child: Scrollbar(
-                  controller: _scroll,
-                  child: SingleChildScrollView(
-                      key: const ValueKey('chart-scroll'),
-                      controller: _scroll,
-                      padding: const EdgeInsets.all(12),
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        child: ConstrainedBox(
-                            constraints:
-                                BoxConstraints(maxWidth: settings.chartWidth),
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  for (final warning in chart.document.warnings)
-                                    Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8),
-                                        child: Text('Chart warning: $warning',
-                                            style: theme.textTheme.bodySmall
-                                                ?.copyWith(
-                                                    color: theme
-                                                        .colorScheme.error))),
-                                  if (sections.isEmpty)
-                                    const Text('No chart content available.'),
-                                  for (final section in sections)
-                                    sectionView(section),
-                                ])),
-                      )),
                 )),
-              ],
-            ));
+          ),
+          if (widget.showSections && sections.isNotEmpty)
+            Positioned(
+              top: 8,
+              right: 8,
+              width: bubbleWidth,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight:
+                        math.max(0, math.min(360, constraints.maxHeight - 16))),
+                child: Scrollbar(
+                  controller: _sectionScroll,
+                  child: ListView.separated(
+                    key: const ValueKey('section-bubbles'),
+                    controller: _sectionScroll,
+                    primary: false,
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: sections.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 4),
+                    itemBuilder: (context, index) {
+                      final section = sections[index];
+                      final selected =
+                          (_activeId ?? sections.first.id) == section.id;
+                      return Semantics(
+                          key: ValueKey('section-state-${section.id}'),
+                          selected: selected,
+                          label:
+                              '${section.label}, section ${index + 1} of ${sections.length}',
+                          child: Tooltip(
+                              message:
+                                  '${section.label} · ${index + 1}/${sections.length}',
+                              child: Material(
+                                  elevation: 2,
+                                  shape: const StadiumBorder(),
+                                  color: selected
+                                      ? theme.colorScheme.primaryContainer
+                                      : theme.colorScheme.surfaceContainerHigh,
+                                  child: TextButton(
+                                    key: ValueKey(
+                                        'section-bubble-${section.id}'),
+                                    style: TextButton.styleFrom(
+                                        minimumSize: const Size(48, 48),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 4, vertical: 6),
+                                        foregroundColor: selected
+                                            ? theme
+                                                .colorScheme.onPrimaryContainer
+                                            : theme
+                                                .colorScheme.onSurfaceVariant,
+                                        shape: const StadiumBorder()),
+                                    onPressed: () => _jumpTo(section),
+                                    child: Text(labels[index],
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.labelMedium
+                                            ?.copyWith(
+                                                color: selected
+                                                    ? theme.colorScheme
+                                                        .onPrimaryContainer
+                                                    : theme.colorScheme
+                                                        .onSurfaceVariant,
+                                                fontWeight: selected
+                                                    ? FontWeight.w800
+                                                    : FontWeight.w600)),
+                                  ))));
+                    },
+                  ),
+                ),
+              ),
+            ),
+        ]);
+      }),
+    );
   }
+}
+
+List<String> _sectionLabels(List<DisplayChartSection> sections) {
+  String shortLabel(String label) {
+    final value = label.trim().toLowerCase();
+    final number = RegExp(r'\d+').firstMatch(value)?.group(0) ?? '';
+    if (value.startsWith('intro')) return 'IN$number';
+    if (value.startsWith('outro') || value.startsWith('ending')) {
+      return 'OUT$number';
+    }
+    if (value.startsWith('pre-chorus') ||
+        value.startsWith('prechorus') ||
+        value.startsWith('pre chorus')) {
+      return 'PC$number';
+    }
+    if (value.startsWith('verse')) return 'V${number.isEmpty ? '1' : number}';
+    if (value.startsWith('chorus')) return 'CH$number';
+    if (value.startsWith('refrain')) return 'RF$number';
+    if (value.startsWith('bridge')) return 'BR$number';
+    final letters = value.replaceAll(RegExp(r'[^a-zA-Z]'), '').toUpperCase();
+    return letters.isEmpty
+        ? 'S'
+        : letters.substring(0, math.min(3, letters.length));
+  }
+
+  final bases = sections.map((s) => shortLabel(s.label)).toList();
+  final seen = <String, int>{};
+  final used = <String>{};
+  return bases.map((base) {
+    if (bases.where((b) => b == base).length == 1 && !used.contains(base)) {
+      used.add(base);
+      return base;
+    }
+    final occurrence = seen.update(base, (n) => n + 1, ifAbsent: () => 1);
+    var label = '$base${RegExp(r'\d$').hasMatch(base) ? '·' : ''}$occurrence';
+    // Numbered names and repeated unnumbered names must not collide.
+    var suffix = occurrence;
+    while (used.contains(label) || bases.contains(label)) {
+      label = '$base·${suffix++}';
+    }
+    used.add(label);
+    return label;
+  }).toList();
 }
