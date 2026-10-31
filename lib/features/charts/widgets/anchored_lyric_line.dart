@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/chart_document.dart';
+import 'chord_label.dart';
 
 /// Display-only spacing moves a lyric segment and its anchors together.
 /// Words wrap before syllables/graphemes; only coincident anchors need lanes.
@@ -46,8 +47,10 @@ class AnchoredLyricLine extends StatelessWidget {
         for (var i = 0; i < line.chords.length; i++) {
           final chord = line.chords[i];
           final offset = chord.offset.clamp(0, lyrics.length);
-          labels.putIfAbsent(offset, () => []).add(_Chord(
-              chord.text, i, measure(chord.text, chordFont, maxWidth: width)));
+          final metrics = ChordLabel.measure(chord.text, chordFont, scaler,
+              maxWidth: width);
+          labels.putIfAbsent(offset, () => []).add(_Chord(chord.text, i,
+              _Metrics(metrics.width, metrics.height, metrics.baseline)));
         }
         final rows = <_Row>[];
         var row = _Row();
@@ -215,11 +218,10 @@ class AnchoredLyricLine extends StatelessWidget {
                           width: width - placed.x,
                           child: Align(
                               alignment: Alignment.topLeft,
-                              child: Text(placed.chord.text,
+                              child: ChordLabel(placed.chord.text,
                                   key: ValueKey(
                                       'chord-${line.original.sourceLine}-${placed.chord.index}'),
-                                  style: chordFont,
-                                  textDirection: TextDirection.ltr))),
+                                  style: chordFont))),
                   ],
                 ])));
       });

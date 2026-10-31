@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/chart_settings.dart';
 import '../models/chart_document.dart';
 import 'anchored_lyric_line.dart';
+import 'chord_label.dart';
 
 /// Navigation-independent shared chart surface for Rehearsal and future Live.
 class ChordChartView extends StatefulWidget {
@@ -140,7 +141,7 @@ class _ChordChartViewState extends State<ChordChartView> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Wrap(spacing: 18, runSpacing: 12, children: [
                       for (final chord in line.chords)
-                        Text(chord.text, style: chordStyle),
+                        ChordLabel(chord.text, style: chordStyle),
                     ])),
           ],
         );
@@ -205,7 +206,8 @@ class _ChordChartViewState extends State<ChordChartView> {
                                                                 style: theme
                                                                     .textTheme
                                                                     .labelSmall),
-                                                            Text(slot.text,
+                                                            ChordLabel(
+                                                                slot.text,
                                                                 style:
                                                                     chordStyle,
                                                                 textAlign:
@@ -256,7 +258,7 @@ class _ChordChartViewState extends State<ChordChartView> {
                 for (final measure in grid.measures)
                   for (final slot in measure)
                     if (!slot.original.sustain)
-                      Text(slot.text, style: chordStyle),
+                      ChordLabel(slot.text, style: chordStyle),
               ]),
             ],
           ] else if (!timingSection ||
