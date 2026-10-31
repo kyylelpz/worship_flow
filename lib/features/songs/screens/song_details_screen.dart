@@ -191,31 +191,6 @@ class SongDetailsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 16),
-          Text('Chart Source', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              song.primaryArrangement.chordProSource,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
-                height: 1.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Canonical source for the primary arrangement. Rehearsal renders the selected setlist arrangement.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontStyle: FontStyle.italic,
-            ),
-          ),
         ],
       ),
     );
