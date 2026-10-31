@@ -75,8 +75,12 @@ class ChartDocument {
       {required this.source,
       required Iterable<ChartSection> sections,
       required Map<String, List<String>> metadata,
-      this.key})
-      : sections = List.unmodifiable(sections),
+      this.key,
+      Iterable<TimingGrid> grids = const [],
+      Iterable<String> warnings = const []})
+      : grids = List.unmodifiable(grids),
+        warnings = List.unmodifiable(warnings),
+        sections = List.unmodifiable(sections),
         metadata = Map.unmodifiable(
             metadata.map((k, v) => MapEntry(k, List<String>.unmodifiable(v))));
 
@@ -87,6 +91,8 @@ class ChartDocument {
 
   /// Effective key of this chart value; metadata always describes the source.
   final MusicalKey? key;
+  final List<TimingGrid> grids;
+  final List<String> warnings;
 }
 
 class DisplayChord {
@@ -119,8 +125,97 @@ class DisplayChartSection {
 }
 
 class DisplayChart {
-  DisplayChart(this.document, Iterable<DisplayChartSection> sections)
-      : sections = List.unmodifiable(sections);
+  DisplayChart(this.document, Iterable<DisplayChartSection> sections,
+      {Iterable<DisplayTimingGrid> grids = const []})
+      : grids = List.unmodifiable(grids),
+        sections = List.unmodifiable(sections);
   final ChartDocument document;
   final List<DisplayChartSection> sections;
+  final List<DisplayTimingGrid> grids;
+}
+
+/// Each slot is one denominator-note beat divided by [TimingGrid.subdivision].
+/// A sustain has no new chord event. It continues the previous event, including
+/// across a bar; no timing is derived from lyric anchors.
+class TimingSlot {
+  const TimingSlot(this.index, {this.chord, this.sustain = false});
+  final int index;
+  final AnchoredChord? chord;
+  final bool sustain;
+}
+
+class TimingMeasure {
+  TimingMeasure(
+      {required this.source,
+      required this.sourceLine,
+      required this.openingBar,
+      required this.closingBar,
+      required Iterable<TimingSlot> slots})
+      : slots = List.unmodifiable(slots);
+  final String source;
+  final int sourceLine;
+  final String openingBar;
+  final String closingBar;
+  final List<TimingSlot> slots;
+}
+
+class TimingGrid {
+  TimingGrid(
+      {required this.sectionId,
+      required this.label,
+      this.targetSectionId,
+      required this.meter,
+      required this.subdivision,
+      required this.isValid,
+      required Iterable<TimingMeasure> measures})
+      : measures = List.unmodifiable(measures);
+  final String sectionId;
+  final String label;
+  final String? targetSectionId;
+  final String meter;
+  final int subdivision;
+  final bool isValid;
+  final List<TimingMeasure> measures;
+
+  int get slotsPerMeasure => switch (meter) {
+        '3/4' => 3 * subdivision,
+        '4/4' => 4 * subdivision,
+        '6/8' => 6 * subdivision,
+        _ => 0,
+      };
+  double? get slotDurationInWholeNotes =>
+      isValid ? 1 / (int.parse(meter.split('/').last) * subdivision) : null;
+
+  TimingGrid mapChords(AnchoredChord Function(AnchoredChord) transform) =>
+      TimingGrid(
+        sectionId: sectionId,
+        label: label,
+        targetSectionId: targetSectionId,
+        meter: meter,
+        subdivision: subdivision,
+        isValid: isValid,
+        measures: measures.map((measure) => TimingMeasure(
+              source: measure.source,
+              sourceLine: measure.sourceLine,
+              openingBar: measure.openingBar,
+              closingBar: measure.closingBar,
+              slots: measure.slots.map((slot) => TimingSlot(slot.index,
+                  sustain: slot.sustain,
+                  chord: slot.chord == null ? null : transform(slot.chord!))),
+            )),
+      );
+}
+
+class DisplayTimingSlot {
+  const DisplayTimingSlot(this.original, this.text);
+  final TimingSlot original;
+  final String text;
+}
+
+class DisplayTimingGrid {
+  DisplayTimingGrid(this.original, Iterable<List<DisplayTimingSlot>> measures)
+      : measures = List.unmodifiable(
+            measures.map((m) => List<DisplayTimingSlot>.unmodifiable(m)));
+  final TimingGrid original;
+  final List<List<DisplayTimingSlot>> measures;
 }

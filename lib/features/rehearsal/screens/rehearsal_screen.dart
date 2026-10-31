@@ -5,10 +5,14 @@ import 'package:intl/intl.dart';
 
 import '../../../core/mock_data/mock_songs.dart';
 import '../../../core/models/setlist.dart';
+import '../../../core/models/chart_settings.dart';
 import '../../../core/models/setlist_item.dart';
 import '../../../core/router/route_paths.dart';
 import '../../auth/providers/auth_providers.dart';
-import '../../charts/widgets/source_chart_view.dart';
+import '../../charts/widgets/chord_chart_view.dart';
+import '../../charts/data/chart_transformer.dart';
+import '../../charts/models/chart_document.dart';
+import '../../charts/providers/chart_providers.dart';
 import '../../profile/screens/chart_settings_screen.dart';
 import '../../setlists/providers/setlist_providers.dart';
 
@@ -120,6 +124,24 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
         .firstOrNull;
     final settings = ref.watch(chartSettingsProvider);
 
+    final personal =
+        ref.watch(personalTransposeProvider(arrangement?.id ?? ''));
+    DisplayChart? chart;
+    String? chartError;
+    if (song != null && arrangement != null) {
+      try {
+        chart = const ChartTransformer().prepare(
+            song: song,
+            arrangement: arrangement,
+            item: item,
+            settings: settings,
+            personalSemitones: personal);
+      } on ArgumentError catch (error) {
+        chartError = 'Chart unavailable: ${error.message}';
+      }
+    }
+    final settingsController = ref.read(chartSettingsProvider.notifier);
+
     void select(int next) {
       if (next >= 0 && next < items.length && next != index) {
         setState(() => _selected = next);
@@ -143,7 +165,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
             Text(
               item == null
                   ? setlist.name
-                  : 'Key ${item.performanceKey} · ${index + 1}/${items.length}',
+                  : 'Key ${chart?.document.key?.name ?? item.performanceKey} · ${index + 1}/${items.length}',
               style: Theme.of(context).textTheme.labelMedium,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -251,6 +273,66 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
       ),
       body: Column(
         children: [
+          if (arrangement != null)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                const SizedBox(width: 8),
+                DropdownButton<ChartDisplayMode>(
+                  value: settings.displayMode,
+                  hint: const Text('Display mode'),
+                  items: [
+                    for (final mode in ChartDisplayMode.values)
+                      DropdownMenuItem(value: mode, child: Text(mode.label))
+                  ],
+                  onChanged: (mode) {
+                    if (mode != null) {
+                      settingsController
+                          .update((s) => s.copyWith(displayMode: mode));
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilterChip(
+                    label: const Text('Nashville'),
+                    selected: settings.useNashville,
+                    onSelected: (value) => settingsController
+                        .update((s) => s.copyWith(useNashville: value))),
+                IconButton(
+                    tooltip: 'Transpose down',
+                    icon: const Icon(Icons.remove),
+                    onPressed: personal > -12
+                        ? () => ref
+                            .read(personalTransposeProvider(arrangement.id)
+                                .notifier)
+                            .state--
+                        : null),
+                Text('$personal'),
+                IconButton(
+                    tooltip: 'Transpose up',
+                    icon: const Icon(Icons.add),
+                    onPressed: personal < 12
+                        ? () => ref
+                            .read(personalTransposeProvider(arrangement.id)
+                                .notifier)
+                            .state++
+                        : null),
+                IconButton(
+                    tooltip: 'Smaller chart text',
+                    icon: const Icon(Icons.text_decrease),
+                    onPressed: () {
+                      settingsController.adjustLyrics(-1);
+                      settingsController.adjustChords(-1);
+                    }),
+                IconButton(
+                    tooltip: 'Larger chart text',
+                    icon: const Icon(Icons.text_increase),
+                    onPressed: () {
+                      settingsController.adjustLyrics(1);
+                      settingsController.adjustChords(1);
+                    }),
+              ]),
+            ),
           if (!setlist.isPublished)
             Padding(
               padding: const EdgeInsets.all(8),
@@ -282,12 +364,15 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                         ? const Center(
                             child: Text(
                                 'Song or arrangement unavailable. Choose another song from the setlist.'))
-                        : SourceChartView(
-                            key: ValueKey(
-                                '$index-${item.songId}-${item.arrangementId}'),
-                            source: arrangement.chordProSource,
-                            settings: settings,
-                          ),
+                        : chart == null
+                            ? Center(
+                                child: Text(chartError ?? 'Chart unavailable.'))
+                            : ChordChartView(
+                                key: ValueKey(
+                                    '$index-${item.songId}-${item.arrangementId}'),
+                                chart: chart,
+                                settings: settings,
+                              ),
                   ),
           ),
         ],

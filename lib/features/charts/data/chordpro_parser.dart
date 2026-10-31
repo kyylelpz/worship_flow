@@ -1,10 +1,11 @@
 import '../models/chart_document.dart';
 import '../models/chord_symbol.dart';
+import 'timing_grid_parser.dart';
 
 class ChordProParser {
   const ChordProParser();
 
-  ChartDocument parse(String source) {
+  ChartDocument parse(String source, {String? defaultTimeSignature}) {
     final sections = <ChartSection>[];
     final metadata = <String, List<String>>{};
     var lines = <ChartLine>[];
@@ -61,11 +62,13 @@ class ChordProParser {
       }
     }
     flush();
-    return ChartDocument(
-        source: source,
-        sections: sections,
-        metadata: metadata,
-        key: MusicalKey.tryParse(metadata['key']?.firstOrNull ?? ''));
+    return attachTimingGrids(
+        ChartDocument(
+            source: source,
+            sections: sections,
+            metadata: metadata,
+            key: MusicalKey.tryParse(metadata['key']?.firstOrNull ?? '')),
+        defaultMeter: defaultTimeSignature);
   }
 
   ChartLine _parseLine(String raw, int number) {
@@ -171,7 +174,8 @@ class ChordProParser {
       'capo',
       'tempo',
       'time',
-      'duration'
+      'duration',
+      'grid_subdivision'
     ].contains(name)) {
       return DirectiveKind.metadata;
     }

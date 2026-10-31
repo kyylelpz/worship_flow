@@ -9,7 +9,7 @@ import 'package:worship_flow/core/router/app_router.dart' as routing;
 import 'package:worship_flow/core/router/route_paths.dart';
 import 'package:worship_flow/features/auth/providers/auth_providers.dart';
 import 'package:worship_flow/features/charts/data/source_chart_adapter.dart';
-import 'package:worship_flow/features/charts/widgets/source_chart_view.dart';
+import 'package:worship_flow/features/charts/widgets/chord_chart_view.dart';
 import 'package:worship_flow/features/profile/screens/chart_settings_screen.dart';
 import 'package:worship_flow/features/rehearsal/screens/rehearsal_screen.dart';
 import 'package:worship_flow/features/setlists/data/mock_setlist_repository.dart';
@@ -203,7 +203,7 @@ void main() {
         route: RoutePaths.setlistRehearsalFor('setlist-3'),
         role: UserRole.worshipTrainee);
     expect(find.text('No published songs available.'), findsOneWidget);
-    expect(find.byType(SourceChartView), findsNothing);
+    expect(find.byType(ChordChartView), findsNothing);
     await openDrawer(tester);
     expect(find.text('Edit'), findsNothing);
     expect(find.text('Reorder'), findsNothing);
@@ -223,7 +223,7 @@ void main() {
     router.go(RoutePaths.setlistRehearsalFor(id!));
     await tester.pumpAndSettle();
     expect(find.textContaining('No songs in this setlist.'), findsOneWidget);
-    expect(find.byType(SourceChartView), findsNothing);
+    expect(find.byType(ChordChartView), findsNothing);
     router.go(RoutePaths.setlistRehearsalFor('missing'));
     await tester.pumpAndSettle();
     expect(find.text('Setlist not found.'), findsOneWidget);

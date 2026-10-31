@@ -44,8 +44,14 @@ class ChartTransformer {
     }
     final unchanged =
         offset == 0 && (targetKey == null || source?.name == spelling.name);
+    AnchoredChord transform(AnchoredChord chord) =>
+        chord.symbol == null || unchanged
+            ? chord
+            : chord.withSymbol(chord.symbol!.transpose(offset, spelling));
     return ChartDocument(
       source: chart.source,
+      grids: chart.grids.map((grid) => grid.mapChords(transform)),
+      warnings: chart.warnings,
       metadata: chart.metadata,
       key: source == null && targetKey == null ? null : spelling,
       sections: chart.sections.map((section) => ChartSection(
@@ -57,11 +63,7 @@ class ChartTransformer {
                   kind: line.kind,
                   text: line.text,
                   directive: line.directive,
-                  chords: line.chords.map((chord) =>
-                      chord.symbol == null || unchanged
-                          ? chord
-                          : chord.withSymbol(
-                              chord.symbol!.transpose(offset, spelling))),
+                  chords: line.chords.map(transform),
                 )),
           )),
     );
@@ -77,6 +79,21 @@ class ChartTransformer {
     final showChords = settings.displayMode != ChartDisplayMode.lyricsOnly;
     return DisplayChart(
         chart,
+        grids: showChords
+            ? chart.grids.map((grid) => DisplayTimingGrid(
+                  grid,
+                  grid.measures.map((measure) => measure.slots
+                      .map((slot) => DisplayTimingSlot(
+                          slot,
+                          slot.sustain
+                              ? '-'
+                              : settings.useNashville &&
+                                      slot.chord?.symbol != null
+                                  ? slot.chord!.symbol!.nashville(context!)
+                                  : slot.chord?.text ?? '?'))
+                      .toList()),
+                ))
+            : const [],
         chart.sections.map((section) => DisplayChartSection(
               section.id,
               section.label,
@@ -108,20 +125,26 @@ class ChartTransformer {
       {required Song song,
       required Arrangement arrangement,
       SetlistItem? item,
-      required ChartSettings settings}) {
+      required ChartSettings settings,
+      int personalSemitones = 0}) {
     if (!song.arrangements.any((a) => a.id == arrangement.id) ||
         (item != null &&
             (item.songId != song.id || item.arrangementId != arrangement.id))) {
       throw ArgumentError('Song, arrangement and setlist item must match.');
     }
-    final parsed = const ChordProParser().parse(arrangement.chordProSource);
+    final parsed = const ChordProParser().parse(arrangement.chordProSource,
+        defaultTimeSignature: arrangement.timeSignature);
     final source = parsed.key?.name ??
         (arrangement.performanceKey.isNotEmpty
             ? arrangement.performanceKey
             : song.defaultKey);
     final chart = transpose(parsed,
         sourceKey: source, targetKey: item?.performanceKey ?? source);
-    return display(chart, settings);
+    return display(
+        personalSemitones == 0
+            ? chart
+            : transpose(chart, semitones: personalSemitones),
+        settings);
   }
 
   MusicalKey _key(String value) =>
