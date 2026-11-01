@@ -62,6 +62,20 @@ class FirestoreGroupRepository
   FirestoreGroupRepository(this.firestore, this.auth);
   final FirebaseFirestore firestore;
   final FirebaseAuth auth;
+  Future<bool> hasMembership(String groupId, String uid) async {
+    if (auth.currentUser?.uid != uid) return false;
+    try {
+      final member = await firestore
+          .doc('groups/$groupId/members/$uid')
+          .get(const GetOptions(source: Source.server));
+      return member.exists &&
+          member.data()?['uid'] == uid &&
+          member.data()?['groupId'] == groupId;
+    } on FirebaseException catch (e) {
+      if (['permission-denied', 'not-found'].contains(e.code)) return false;
+      rethrow;
+    }
+  }
 
   WorshipGroup _group(
           String id, Map<String, dynamic> data, List<GroupMember> members) =>

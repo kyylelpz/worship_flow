@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/firebase/navigation_resume.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -30,7 +31,10 @@ class RehearsalScreen extends ConsumerWidget {
       ),
       error: (error, stack) => _Unavailable(
         message: 'Could not load setlist.',
-        onRetry: () => ref.invalidate(setlistByIdProvider(setlistId)),
+        onRetry: () {
+          ref.invalidate(groupSetlistsProvider);
+          ref.invalidate(setlistByIdProvider(setlistId));
+        },
       ),
       data: (value) => value == null
           ? const _Unavailable(message: 'Setlist not found.')
@@ -76,6 +80,9 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
   int _selected = 0;
   double _drag = 0;
   bool _showSections = true;
+  bool _previewDraft = false;
+  bool _resumeSelected = false;
+  String? _lastRecorded;
 
   @override
   void didUpdateWidget(_RehearsalBody oldWidget) {
@@ -99,8 +106,10 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
   }
 
   List<SetlistItem> _items(Setlist setlist) {
-    if (setlist.isPublished) return setlist.publishedItems;
     final canEdit = ref.read(currentRoleProvider)?.canManageSetlists ?? false;
+    if (setlist.isPublished && (!_previewDraft || !canEdit)) {
+      return setlist.publishedItems;
+    }
     return canEdit ? setlist.draftItems ?? setlist.publishedItems : const [];
   }
 
@@ -117,8 +126,39 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
     final role = ref.watch(currentRoleProvider);
     final canEdit = role?.canManageSetlists ?? false;
     final items = _items(setlist);
+    final availableSongs = ref.watch(groupSongsProvider).asData?.value;
+    if (!_resumeSelected && items.isNotEmpty && availableSongs != null) {
+      _resumeSelected = true;
+      final resume = ref.read(sessionResumeProvider).valueOrNull;
+      if (resume?.setlistId == setlist.id &&
+          resume?.groupId == setlist.groupId) {
+        final found = items.indexWhere((i) =>
+            i.songId == resume?.songId &&
+            availableSongs.any((s) => s.id == i.songId));
+        final first = items
+            .indexWhere((i) => availableSongs.any((s) => s.id == i.songId));
+        _selected = found < 0 ? (first < 0 ? 0 : first) : found;
+      }
+    }
     final index = _selected < items.length ? _selected : 0;
     final item = items.isEmpty ? null : items[index];
+    final record = '${setlist.id}|${item?.songId}';
+    if (_lastRecorded != record && availableSongs != null) {
+      _lastRecorded = record;
+      final uid = ref.read(currentUserProvider)?.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted &&
+            ref.read(currentUserProvider)?.id == uid &&
+            ref.read(selectedGroupIdProvider) == setlist.groupId) {
+          rememberLocation(
+              ref,
+              ResumeLocation(
+                  groupId: setlist.groupId,
+                  setlistId: setlist.id,
+                  songId: item?.songId));
+        }
+      });
+    }
     final asyncSongs = ref.watch(groupSongsProvider);
     if (asyncSongs.isLoading) {
       return Scaffold(
@@ -272,6 +312,19 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                     onPressed: () => _openManagement(
                         RoutePaths.setlistEditorFor(setlist.id)),
                     label: const Text('Edit Setlist')),
+              if (canEdit && setlist.isPublished && setlist.hasDraftChanges)
+                TextButton.icon(
+                    icon: const Icon(Icons.preview_outlined),
+                    label: Text(_previewDraft
+                        ? 'View Published Setlist'
+                        : 'Preview Draft'),
+                    onPressed: () {
+                      setState(() {
+                        _previewDraft = !_previewDraft;
+                        _selected = 0;
+                      });
+                      Navigator.of(context).pop();
+                    }),
               const Divider(height: 1),
               Expanded(
                 child: ListView(
@@ -305,6 +358,10 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
       ),
       body: Column(
         children: [
+          if (_previewDraft && canEdit)
+            const Padding(
+                padding: EdgeInsets.all(8),
+                child: Text('Draft preview · unpublished changes')),
           if (arrangement != null)
             SafeArea(
               top: false,

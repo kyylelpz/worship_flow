@@ -184,6 +184,99 @@ service cloud.firestore {
     allow delete: if complete() && admin(g,request.auth.uid) && !existsAfter(indexPath(g,uid)) && survivingAdmin(g);
    }
   }
+  // Phase 3C: songs contain 1..8 arrangements, 0..8 presets (max 2 changed arrangements/write);
+  // Setlists contain 0..6 items per version. IDs are immutable. Canonical source
+  // is a string, never rewritten. catalog/{arrangementId} stores songId + uses.
+  // Registry transitions and their Song/Setlist writes are one atomic operation.
+  function contentRead(g) { return google() && exists(groupPath(g)) && exists(memberPath(g,request.auth.uid)); }
+  function contentWrite(g) { return contentRead(g) && get(memberPath(g,request.auth.uid)).data.role in ['administrator','worshipLeader']; }
+  function registryPath(g,id) { return /databases/$(database)/documents/groups/$(g)/catalog/$(id); }
+  function songPath(g,id) { return /databases/$(database)/documents/groups/$(g)/songs/$(id); }
+  function setlistPath(g,id) { return /databases/$(database)/documents/groups/$(g)/setlists/$(id); }
+  function contentText(s,n) { return s is string && s.size()>0 && s.size()<=n; }
+  function contentId(id) { return id is string && id.matches('^[A-Za-z0-9-]{1,80}$'); }
+  function musicKey(k) { return k is string && k.matches('^[A-G][#b♯♭]{0,2}\\s*(m|min|minor|maj|major)?$'); }
+  function validArrangement(g,s,a) {
+   return a.keys().hasOnly(['id','name','bpm','timeSignature','chordProSource','referenceLink'])
+    && contentId(a.id) && contentText(a.name,120) && a.bpm is int && a.bpm >= 1 && a.bpm <= 400
+    && a.timeSignature in ['3/4','4/4','6/8'] && a.chordProSource is string && a.chordProSource.size()>0 && a.chordProSource.size()<=200000
+    && a.referenceLink is string && a.referenceLink.size()<=2048 && (a.referenceLink=='' || a.referenceLink.matches('^https?://[^/ ].*'))
+    && getAfter(registryPath(g,a.id)).data.songId == s;
+  }
+  function songArrangementAt(g,s,d,i) {
+   let keys=d.arrangementChanges;
+   return keys.size()<=i || !d.arrangements.keys().hasAny([keys[i]]) || d.arrangements[keys[i]].id==keys[i] && validArrangement(g,s,d.arrangements[keys[i]]);
+  }
+  function presetAt(list,i) { return list.size()<=i || list[i].keys().hasOnly(['vocalistName','key']) && contentText(list[i].vocalistName,80) && musicKey(list[i].key); }
+  function validSong(g,id,d) {
+   let old=request.method=='update' ? resource.data.arrangements : {};
+   return d.keys().hasOnly(['id','groupId','title','artist','category','isFavorite','vocalistKeys','arrangements','arrangementIds','arrangementChanges','createdAt','updatedAt'])
+    && contentId(id) && d.id==id && d.groupId==g && contentText(d.title,200) && contentText(d.artist,200) && contentText(d.category,80) && d.isFavorite is bool
+    && d.createdAt is timestamp && d.updatedAt==request.time && d.arrangements is map && d.arrangementIds is list && d.vocalistKeys is list
+    && d.arrangementChanges is list && d.arrangementChanges.size()<=2 && d.arrangementChanges.toSet()==d.arrangements.diff(old).affectedKeys()
+    && (request.method!='create' || d.vocalistKeys.size()<=4)
+    && d.arrangements.size()>0 && d.arrangements.size()<=8 && d.arrangements.keys().toSet()==d.arrangementIds.toSet() && d.arrangementIds.toSet().size()==d.arrangementIds.size() && d.vocalistKeys.size()<=8
+    && (d.arrangementChanges.size()<=0 || songArrangementAt(g,id,d,0) && (d.arrangementChanges.size()<=1 || songArrangementAt(g,id,d,1)))
+    && (request.method=='update' && d.vocalistKeys==resource.data.vocalistKeys || (d.vocalistKeys.size()<=0 || presetAt(d.vocalistKeys,0) && (d.vocalistKeys.size()<=1 || presetAt(d.vocalistKeys,1) && (d.vocalistKeys.size()<=2 || presetAt(d.vocalistKeys,2) && (d.vocalistKeys.size()<=3 || presetAt(d.vocalistKeys,3) && (d.vocalistKeys.size()<=4 || presetAt(d.vocalistKeys,4) && (d.vocalistKeys.size()<=5 || presetAt(d.vocalistKeys,5) && (d.vocalistKeys.size()<=6 || presetAt(d.vocalistKeys,6) && (d.vocalistKeys.size()<=7 || presetAt(d.vocalistKeys,7) && true)))))))));
+  }
+  function releasedArrangementAt(g,list,i) { return list.size()<=i || !existsAfter(registryPath(g,list[i])); }
+  function releasedSong(g,list) { return
+    releasedArrangementAt(g,list,0) && releasedArrangementAt(g,list,1) && releasedArrangementAt(g,list,2) && releasedArrangementAt(g,list,3) && releasedArrangementAt(g,list,4) && releasedArrangementAt(g,list,5) && releasedArrangementAt(g,list,6) && releasedArrangementAt(g,list,7);
+  }
+  function validItem(g,id,item,keys) {
+   let registration=getAfter(registryPath(g,item.arrangementId)).data;
+   return item.keys().hasOnly(['songId','arrangementId','performanceKey','vocalistName'])
+    && musicKey(item.performanceKey)
+    && (item.vocalistName==null || contentText(item.vocalistName,80))
+    && registration.songId==item.songId
+    && registration.uses.hasAny([id]);
+  }
+  function versionKeys(list) { return [list.size()>0 ? list[0].arrangementId : '',list.size()>1 ? list[1].arrangementId : '',list.size()>2 ? list[2].arrangementId : '',list.size()>3 ? list[3].arrangementId : '',list.size()>4 ? list[4].arrangementId : '',list.size()>5 ? list[5].arrangementId : ''].removeAll(['']).toSet(); }
+  function validItems(g,id,list,keys) { return list is list && list.size()<=6 && keys is list && keys.size()<=6 && keys.size()==keys.toSet().size() && keys.toSet()==versionKeys(list) && (list.size()<=0 || validItem(g,id,list[0],keys) && (list.size()<=1 || validItem(g,id,list[1],keys) && (list.size()<=2 || validItem(g,id,list[2],keys) && (list.size()<=3 || validItem(g,id,list[3],keys) && (list.size()<=4 || validItem(g,id,list[4],keys) && (list.size()<=5 || validItem(g,id,list[5],keys) && true)))))); }
+  function validSetlist(g,id,d) {
+   return d.keys().hasOnly(['id','groupId','name','serviceDateTime','status','publishedItems','draftItems','publishedKeys','draftKeys','referenceKeys','createdAt','updatedAt','revision'])
+    && contentId(id) && d.id==id && d.groupId==g && contentText(d.name,120) && d.serviceDateTime is timestamp && d.status in ['draft','published']
+    && d.publishedKeys is list && d.draftKeys is list && d.referenceKeys.toSet()==d.publishedKeys.toSet().union(d.draftKeys.toSet())
+    && d.referenceKeys is list && d.referenceKeys.size()<=12 && d.referenceKeys.toSet().size()==d.referenceKeys.size()
+    && d.createdAt is timestamp && d.updatedAt==request.time && d.revision is int && d.revision>0
+    && (d.status=='published' || d.publishedItems.size()==0 && d.draftItems!=null)
+    && (request.method=='update' && d.publishedItems==resource.data.publishedItems && d.publishedKeys==resource.data.publishedKeys || validItems(g,id,d.publishedItems,d.publishedKeys)) && (d.draftItems==null && d.draftKeys.size()==0 || request.method=='update' && d.draftItems==resource.data.draftItems && d.draftKeys==resource.data.draftKeys || validItems(g,id,d.draftItems,d.draftKeys));
+  }
+  function validCatalog(g,id,d) {
+   return d.keys().hasOnly(['songId','uses','target','updatedAt']) && contentId(id) && contentId(d.songId) && contentId(d.target)
+    && d.uses is list && d.updatedAt==request.time;
+  }
+  function catalogReferences(g,id,d) {
+   let path=setlistPath(g,d.target);
+   let refs=existsAfter(path) ? getAfter(path).data.referenceKeys : [];
+   return d.songId==resource.data.songId && d.uses.toSet()==resource.data.uses.toSet().difference([d.target].toSet()).union(refs.hasAny([id])?[d.target].toSet():[].toSet());
+  }
+  match /groups/{g}/songs/{id} {
+   allow read: if contentRead(g);
+   allow create: if contentWrite(g) && validSong(g,id,request.resource.data) && request.resource.data.createdAt==request.time;
+   allow update: if contentWrite(g) && validSong(g,id,request.resource.data) && request.resource.data.createdAt==resource.data.createdAt
+    && (request.resource.data.arrangementIds.toSet().hasAll(resource.data.arrangementIds) || removedSongArrangements(g,resource.data.arrangementIds,request.resource.data.arrangementIds));
+   allow delete: if contentWrite(g) && releasedSong(g,resource.data.arrangementIds);
+  }
+  function removedArrangementAt(g,old,next,i) { return old.size()<=i || next.hasAny([old[i]]) || !existsAfter(registryPath(g,old[i])); }
+  function removedSongArrangements(g,old,next) { return
+    removedArrangementAt(g,old,next,0) && removedArrangementAt(g,old,next,1) && removedArrangementAt(g,old,next,2) && removedArrangementAt(g,old,next,3) && removedArrangementAt(g,old,next,4) && removedArrangementAt(g,old,next,5) && removedArrangementAt(g,old,next,6) && removedArrangementAt(g,old,next,7);
+  }
+  match /groups/{g}/setlists/{id} {
+   allow read: if contentRead(g);
+   allow create: if contentWrite(g) && validSetlist(g,id,request.resource.data) && request.resource.data.createdAt==request.time && request.resource.data.revision==1;
+   allow update: if contentWrite(g) && validSetlist(g,id,request.resource.data) && request.resource.data.createdAt==resource.data.createdAt && request.resource.data.revision==resource.data.revision+1;
+   allow delete: if contentWrite(g);
+  }
+  match /groups/{g}/catalog/{id} {
+   allow get: if contentRead(g);
+   allow create: if contentWrite(g) && validCatalog(g,id,request.resource.data)
+    && request.resource.data.uses.size()==0
+    && getAfter(songPath(g,request.resource.data.songId)).data.arrangementIds.hasAny([id]);
+   allow update: if contentWrite(g) && validCatalog(g,id,request.resource.data) && catalogReferences(g,id,request.resource.data);
+   allow delete: if contentWrite(g) && resource.data.uses.size()==0
+    && (!existsAfter(songPath(g,resource.data.songId)) || !getAfter(songPath(g,resource.data.songId)).data.arrangementIds.hasAny([id]));
+  }
   match /directoryAccess/{uid} {
    allow get: if owner(uid);
    allow create, update: if owner(uid) && complete() && validLookupContext(uid,request.resource.data);

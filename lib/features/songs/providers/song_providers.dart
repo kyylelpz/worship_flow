@@ -1,3 +1,6 @@
+import '../../groups/data/firestore_group_repository.dart';
+import '../../../core/firebase/firebase_providers.dart';
+import '../data/firestore_song_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/song.dart';
@@ -10,6 +13,13 @@ import '../data/mock_song_repository.dart';
 import 'song_catalog_provider.dart';
 
 final songRepositoryProvider = Provider<SongRepository>((ref) {
+  if (!ref.watch(useMockBackendProvider) &&
+      ref.watch(groupRepositoryProvider) is FirestoreGroupRepository) {
+    return FirestoreSongRepository(
+        ref.watch(firestoreProvider),
+        ref.watch(firebaseAuthProvider),
+        () => ref.read(selectedGroupIdProvider));
+  }
   final setlists = ref.watch(setlistRepositoryProvider);
   return MockSongRepository(
       catalog: ref.watch(songCatalogProvider),

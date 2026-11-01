@@ -6,7 +6,10 @@ import '../../../core/models/setlist_item.dart';
 import 'setlist_repository.dart';
 
 class MockSetlistRepository
-    implements SetlistRepository, SetlistSongReferences {
+    implements
+        SetlistRepository,
+        SetlistSongReferences,
+        AtomicSetlistRepository {
   MockSetlistRepository(
       {this.delay = const Duration(milliseconds: 250), this.validateItems});
 
@@ -152,5 +155,42 @@ class MockSetlistRepository
 
   void dispose() {
     _controller.close();
+  }
+
+  @override
+  Future<String> commitSetlist(
+      {required String id,
+      required String groupId,
+      required String name,
+      required DateTime serviceDateTime,
+      required List<SetlistItem> items,
+      bool publish = false,
+      int? expectedRevision}) async {
+    await Future<void>.delayed(delay);
+    if (name.trim().isEmpty) {
+      throw StateError('Enter a setlist name.');
+    }
+    validateItems?.call(groupId, items);
+    final old = _find(id);
+    if (expectedRevision != null && old?.revision != expectedRevision) {
+      throw StateError('Setlist changed. Reopen it before saving.');
+    }
+    final value = Setlist(
+        id: id,
+        groupId: groupId,
+        name: name.trim(),
+        serviceDateTime: serviceDateTime,
+        status: publish
+            ? SetlistStatus.published
+            : old?.status ?? SetlistStatus.draft,
+        publishedItems: publish
+            ? List.unmodifiable(items)
+            : old?.publishedItems ?? const [],
+        draftItems: publish ? null : List.unmodifiable(items),
+        revision: (old?.revision ?? 0) + 1);
+    _setlists.removeWhere((s) => s.id == id);
+    _setlists.add(value);
+    _emit();
+    return id;
   }
 }

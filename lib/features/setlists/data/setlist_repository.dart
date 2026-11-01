@@ -40,3 +40,15 @@ abstract class SetlistRepository {
 abstract interface class SetlistSongReferences {
   bool referencesSong(String groupId, String songId, {String? arrangementId});
 }
+
+/// One explicit editor commit; metadata and intended items must succeed together.
+abstract interface class AtomicSetlistRepository {
+  Future<String> commitSetlist(
+      {required String id,
+      required String groupId,
+      required String name,
+      required DateTime serviceDateTime,
+      required List<SetlistItem> items,
+      bool publish = false,
+      int? expectedRevision});
+}

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:uuid/uuid.dart';
+import '../data/setlist_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +14,9 @@ import '../../../core/models/setlist_item.dart';
 import '../../../core/models/song.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/setlist_providers.dart';
+
+final setlistExitGuardsProvider =
+    Provider<Map<String, Future<bool> Function()>>((ref) => {});
 
 class SetlistEditorScreen extends ConsumerStatefulWidget {
   const SetlistEditorScreen({super.key, required this.setlistId});
@@ -28,76 +34,140 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
   List<SetlistItem> _items = [];
   bool _loaded = false;
   bool _saving = false;
-  bool _dirty = false;
+  late final String _id =
+      widget.setlistId == 'new' ? const Uuid().v4() : widget.setlistId;
+  bool _persisted = false;
+  int _revision = 0;
+  String _baseline = '';
+  bool _exitApproved = false;
+  Future<bool>? _exitDialog;
+  String? _loadError;
+  String _snapshot() => jsonEncode({
+        'name': _nameController.text,
+        'date': _serviceDateTime?.toIso8601String(),
+        'items': [
+          for (final i in _items)
+            {
+              'song': i.songId,
+              'arrangement': i.arrangementId,
+              'key': i.performanceKey,
+              'vocalist': i.vocalistName
+            }
+        ]
+      });
+  bool get _dirty => _loaded && _baseline != _snapshot();
+  set _dirty(bool value) {
+    if (!value) _baseline = _snapshot();
+  }
+
   bool _missing = false;
+  late final Map<String, Future<bool> Function()> _guards;
+  late final String? _ownerUid;
+  late final String? _ownerGroup;
 
   @override
   void initState() {
     super.initState();
+    _ownerUid = ref.read(currentUserProvider)?.id;
+    _ownerGroup = ref.read(selectedGroupIdProvider);
+    _guards = ref.read(setlistExitGuardsProvider);
+    _guards[widget.setlistId] = _confirmDiscard;
     _load();
   }
 
   Future<void> _load() async {
-    final setlist =
-        await ref.read(setlistRepositoryProvider).getSetlist(widget.setlistId);
-    if (!mounted) return;
-    if (setlist == null) {
-      setState(() {
-        _missing = true;
-        _loaded = true;
-      });
+    if (widget.setlistId == 'new') {
+      final now = DateTime.now();
+      _serviceDateTime = DateTime(now.year, now.month, now.day + 7, 9, 30);
+      _loaded = true;
+      _baseline = _snapshot();
       return;
     }
-    setState(() {
-      _nameController.text = setlist.name;
-      _serviceDateTime = setlist.serviceDateTime;
-      _items = List<SetlistItem>.from(
-        setlist.draftItems ?? setlist.publishedItems,
-      );
-      _loaded = true;
-    });
+    try {
+      final setlist = await ref
+          .read(setlistRepositoryProvider)
+          .getSetlist(widget.setlistId);
+      if (!mounted) return;
+      if (setlist == null) {
+        setState(() {
+          _missing = true;
+          _loaded = true;
+        });
+        return;
+      }
+      setState(() {
+        _nameController.text = setlist.name;
+        _serviceDateTime = setlist.serviceDateTime;
+        _items = List<SetlistItem>.from(
+          setlist.draftItems ?? setlist.publishedItems,
+        );
+        _loaded = true;
+        _persisted = true;
+        _revision = setlist.revision;
+        _baseline = _snapshot();
+      });
+    } catch (e) {
+      if (mounted) setState(() => _loadError = '$e');
+    }
   }
 
   @override
   void dispose() {
+    _guards.remove(widget.setlistId);
     _nameController.dispose();
     super.dispose();
   }
 
   void _markDirty() {
-    if (!_dirty) setState(() => _dirty = true);
+    setState(() => _exitApproved = false);
   }
 
-  Future<bool> _saveDraft() async {
+  Future<bool> _saveDraft({bool publish = false}) async {
     if (_saving) return false;
+    if (ref.read(currentUserProvider)?.id != _ownerUid ||
+        ref.read(selectedGroupIdProvider) != _ownerGroup) {
+      return false;
+    }
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Enter a setlist name.')));
+      return false;
+    }
+    final repository = ref.read(setlistRepositoryProvider);
+    final group = ref.read(selectedGroupIdProvider);
+    if (repository is! AtomicSetlistRepository || group == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Atomic setlist storage is unavailable.')));
+      return false;
+    }
     setState(() => _saving = true);
     try {
-      await ref.read(setlistRepositoryProvider).updateMetadata(
-            widget.setlistId,
-            name: _nameController.text.trim().isEmpty
-                ? 'Untitled Setlist'
-                : _nameController.text.trim(),
-            serviceDateTime: _serviceDateTime,
-          );
-      await ref
-          .read(setlistRepositoryProvider)
-          .saveDraft(widget.setlistId, _items);
-      ref.invalidate(setlistByIdProvider(widget.setlistId));
+      await (repository as AtomicSetlistRepository).commitSetlist(
+          id: _id,
+          groupId: group,
+          name: _nameController.text.trim(),
+          serviceDateTime: _serviceDateTime!,
+          items: List.unmodifiable(_items),
+          publish: publish,
+          expectedRevision: _persisted ? _revision : null);
+      ref.invalidate(setlistByIdProvider(_id));
       if (!mounted) return false;
       setState(() {
         _saving = false;
+        _persisted = true;
+        _revision++;
         _dirty = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Draft saved.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(publish ? 'Setlist published.' : 'Draft saved.')));
       return true;
     } catch (e) {
-      if (!mounted) return false;
-      setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not save: $e')),
-      );
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Could not save: Your edits are kept. Check your connection/permissions and retry: $e')));
+      }
       return false;
     }
   }
@@ -125,19 +195,10 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     );
     if (ok != true || !mounted) return;
 
-    final saved = await _saveDraft();
-    if (!saved || !mounted) return;
-    await ref.read(setlistRepositoryProvider).publish(widget.setlistId);
-    ref.invalidate(setlistByIdProvider(widget.setlistId));
-    if (!mounted) return;
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(RoutePaths.setlists);
+    if (await _saveDraft(publish: true) && mounted) {
+      _exitApproved = true;
+      await _requestBack();
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Setlist published.')),
-    );
   }
 
   Future<void> _managementAction(String action) async {
@@ -162,9 +223,14 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     try {
       final repo = ref.read(setlistRepositoryProvider);
       if (action == 'delete') {
-        await repo.delete(widget.setlistId);
+        setState(() => _saving = true);
+        await repo.delete(_id);
         if (!mounted) return;
-        setState(() => _dirty = false);
+        setState(() {
+          _saving = false;
+          _dirty = false;
+          _exitApproved = true;
+        });
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           if (context.canPop()) {
@@ -175,14 +241,17 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
         });
       } else {
         if (_dirty && !await _saveDraft()) return;
-        final id = await repo.duplicate(widget.setlistId);
+        setState(() => _saving = true);
+        final id = await repo.duplicate(_id);
+        if (mounted) setState(() => _saving = false);
         if (mounted) {
           await context.push(RoutePaths.setlistEditorFor(id));
         }
       }
-      ref.invalidate(setlistByIdProvider(widget.setlistId));
+      ref.invalidate(setlistByIdProvider(_id));
     } catch (error) {
       if (mounted) {
+        setState(() => _saving = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
       }
@@ -272,26 +341,44 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     return null;
   }
 
-  Future<bool> _confirmDiscard() async {
-    if (!_dirty) return true;
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Discard changes?'),
-        content: const Text('You have unsaved changes.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep editing'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Discard'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
+  Future<bool> _confirmDiscard() {
+    if (ref.read(currentUserProvider)?.id != _ownerUid ||
+        ref.read(selectedGroupIdProvider) != _ownerGroup) {
+      return Future.value(true);
+    }
+    if (_saving) return Future.value(false);
+    if (_exitApproved ||
+        !_dirty ||
+        ref.read(currentRoleProvider)?.canManageSetlists != true) {
+      return Future.value(true);
+    }
+    return _exitDialog ??= _askExit().whenComplete(() => _exitDialog = null);
+  }
+
+  Future<bool> _askExit() async {
+    final result = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: const Text('Save Setlist as Draft?'),
+                content: const Text(
+                    'You have unsaved changes. Would you like to save this setlist as a draft before leaving?'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, 'cancel'),
+                      child: const Text('Cancel')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, 'discard'),
+                      child: const Text('Discard Changes')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, 'save'),
+                      child: const Text('Save as Draft')),
+                ]));
+    if (!mounted || result == null || result == 'cancel') return false;
+    final leave = result == 'discard' || await _saveDraft();
+    if (leave && mounted) {
+      _exitApproved = true;
+    }
+    return leave;
   }
 
   Future<void> _requestBack() async {
@@ -325,6 +412,11 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
           body: const Center(child: Text('Setlist not found.')));
     }
 
+    if (_loadError != null) {
+      return Scaffold(
+          appBar: AppBar(),
+          body: Center(child: Text('Could not load setlist: $_loadError')));
+    }
     if (!_loaded) {
       return Scaffold(
         appBar: AppBar(),
@@ -333,7 +425,7 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     }
 
     return PopScope(
-      canPop: !_dirty && !_saving && context.canPop(),
+      canPop: (!_dirty || _exitApproved) && !_saving && context.canPop(),
       onPopInvokedWithResult: (didPop, result) async {
         if (!didPop) await _requestBack();
       },
@@ -342,12 +434,12 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
           leading: IconButton(
               tooltip: 'Back',
               icon: const Icon(Icons.arrow_back),
-              onPressed: _requestBack),
-          title: const Text('Edit Setlist'),
+              onPressed: _saving ? null : _requestBack),
+          title: Text(_persisted ? 'Edit Setlist' : 'New Setlist'),
           actions: [
             PopupMenuButton<String>(
                 tooltip: 'Actions',
-                enabled: !_saving,
+                enabled: !_saving && _persisted,
                 itemBuilder: (_) => const [
                       PopupMenuItem(
                           value: 'duplicate', child: Text('Duplicate')),
@@ -355,93 +447,96 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
                     ],
                 onSelected: _managementAction),
             TextButton(
-              onPressed: _dirty && !_saving ? _saveDraft : null,
+              onPressed:
+                  (_dirty || !_persisted) && !_saving ? _saveDraft : null,
               child: _saving
                   ? const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Save'),
+                  : const Text('Save Draft'),
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-          children: [
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Setlist name'),
-              onChanged: (_) => _markDirty(),
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: _pickDateTime,
-              borderRadius: BorderRadius.circular(14),
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Service date & time',
-                  suffixIcon: Icon(Icons.calendar_today_rounded),
-                ),
-                child: Text(
-                  _serviceDateTime == null
-                      ? 'Not set'
-                      : DateFormat('EEE, MMM d · h:mm a')
-                          .format(_serviceDateTime!),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
+        body: AbsorbPointer(
+            absorbing: _saving,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
               children: [
-                Text('Songs', style: theme.textTheme.titleMedium),
-                const SizedBox(width: 8),
-                Text(
-                  '(${_items.length})',
-                  style: theme.textTheme.bodySmall,
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(labelText: 'Setlist name'),
+                  onChanged: (_) => _markDirty(),
                 ),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: _addSongs,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add'),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: _pickDateTime,
+                  borderRadius: BorderRadius.circular(14),
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Service date & time',
+                      suffixIcon: Icon(Icons.calendar_today_rounded),
+                    ),
+                    child: Text(
+                      _serviceDateTime == null
+                          ? 'Not set'
+                          : DateFormat('EEE, MMM d · h:mm a')
+                              .format(_serviceDateTime!),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Text('Songs', style: theme.textTheme.titleMedium),
+                    const SizedBox(width: 8),
+                    Text(
+                      '(${_items.length})',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: _addSongs,
+                      icon: const Icon(Icons.add_rounded, size: 18),
+                      label: const Text('Add'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_items.isEmpty)
+                  _EmptySongs(onAdd: _addSongs)
+                else
+                  ReorderableListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _items.length,
+                    onReorderItem: _reorder,
+                    buildDefaultDragHandles: false,
+                    itemBuilder: (ctx, i) {
+                      final item = _items[i];
+                      final song = _songFor(item.songId);
+                      return Padding(
+                        key: ValueKey('item-$i-${item.songId}'),
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _EditorSongTile(
+                          index: i,
+                          item: item,
+                          song: song,
+                          onTap: () => _editItem(i),
+                          onRemove: () => _remove(i),
+                        ),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _publish,
+                  icon: const Icon(Icons.cloud_upload_rounded),
+                  label: const Text('Publish Setlist'),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            if (_items.isEmpty)
-              _EmptySongs(onAdd: _addSongs)
-            else
-              ReorderableListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _items.length,
-                onReorderItem: _reorder,
-                buildDefaultDragHandles: false,
-                itemBuilder: (ctx, i) {
-                  final item = _items[i];
-                  final song = _songFor(item.songId);
-                  return Padding(
-                    key: ValueKey('item-$i-${item.songId}'),
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _EditorSongTile(
-                      index: i,
-                      item: item,
-                      song: song,
-                      onTap: () => _editItem(i),
-                      onRemove: () => _remove(i),
-                    ),
-                  );
-                },
-              ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: _saving ? null : _publish,
-              icon: const Icon(Icons.cloud_upload_rounded),
-              label: const Text('Publish Setlist'),
-            ),
-          ],
-        ),
+            )),
       ),
     );
   }

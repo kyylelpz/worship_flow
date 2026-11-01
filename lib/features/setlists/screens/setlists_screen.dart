@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
@@ -30,30 +29,7 @@ class SetlistsScreen extends ConsumerWidget {
     Future<void> openCreate() async {
       if (group == null) return;
 
-      final now = DateTime.now();
-      var daysUntilSunday = (DateTime.sunday - now.weekday) % 7;
-      final todaySlot = DateTime(now.year, now.month, now.day, 8, 30);
-      if (daysUntilSunday == 0 && !now.isBefore(todaySlot)) {
-        daysUntilSunday = 7;
-      }
-      final sunday = DateTime(
-        now.year,
-        now.month,
-        now.day + daysUntilSunday,
-        8,
-        30,
-      );
-
-      final name = '${DateFormat('MMM d').format(sunday)} Sunday Service';
-
-      final id = await ref.read(setlistRepositoryProvider).createDraft(
-        groupId: group.id,
-        name: name,
-        serviceDateTime: sunday,
-      );
-      if (context.mounted) {
-        unawaited(context.push(RoutePaths.setlistEditorFor(id)));
-      }
+      await context.push(RoutePaths.setlistEditorFor('new'));
     }
 
     return Scaffold(
@@ -147,7 +123,8 @@ class SetlistsScreen extends ConsumerWidget {
 
                 return Column(
                   children: [
-                    if (filter == SetlistFilter.upcoming && hasNextUpcoming) ...[
+                    if (filter == SetlistFilter.upcoming &&
+                        hasNextUpcoming) ...[
                       // optional section header: "Later services"
                       const SizedBox(height: 4),
                     ],

@@ -6,6 +6,8 @@ import '../providers/song_providers.dart';
 import '../widgets/song_action_helpers.dart';
 import '../../../core/router/route_paths.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../../core/widgets/error_bubble.dart';
+import '../../../core/utils/error_format.dart';
 
 class SongDetailsScreen extends ConsumerWidget {
   const SongDetailsScreen({super.key, required this.songId});
@@ -21,10 +23,16 @@ class SongDetailsScreen extends ConsumerWidget {
           body: const Center(child: CircularProgressIndicator()));
     }
     if (asyncSongs.hasError) {
+      final err = UserFacingError.from(asyncSongs.error!);
       return Scaffold(
-          appBar: AppBar(),
-          body:
-              Center(child: Text('Could not load songs: ${asyncSongs.error}')));
+        appBar: AppBar(),
+        body: ErrorBubble(
+          title: err.title,
+          message: err.message,
+          icon: err.icon,
+          onRetry: () => ref.invalidate(groupSongsProvider),
+        ),
+      );
     }
     final song = ref.watch(songByIdProvider(songId));
     final canEdit = ref.watch(canManageSongsProvider);

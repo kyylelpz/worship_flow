@@ -11,6 +11,7 @@ class Setlist {
     required this.status,
     required this.publishedItems,
     this.draftItems,
+    this.revision = 0,
   });
 
   final String id;
@@ -20,6 +21,7 @@ class Setlist {
   final SetlistStatus status;
   final List<SetlistItem> publishedItems;
   final List<SetlistItem>? draftItems;
+  final int revision;
 
   List<SetlistItem> get displayItems => publishedItems;
   int get songCount => publishedItems.length;
@@ -34,6 +36,7 @@ class Setlist {
     List<SetlistItem>? publishedItems,
     List<SetlistItem>? draftItems,
     bool clearDraft = false,
+    int? revision,
   }) {
     return Setlist(
       id: id,
@@ -43,6 +46,7 @@ class Setlist {
       status: status ?? this.status,
       publishedItems: publishedItems ?? this.publishedItems,
       draftItems: clearDraft ? null : (draftItems ?? this.draftItems),
+      revision: revision ?? this.revision,
     );
   }
 }

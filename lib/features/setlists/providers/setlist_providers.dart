@@ -1,3 +1,7 @@
+import '../../groups/providers/group_providers.dart';
+import '../../groups/data/firestore_group_repository.dart';
+import '../../../core/firebase/firebase_providers.dart';
+import '../data/firestore_setlist_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/setlist.dart';
@@ -6,8 +10,15 @@ import '../../auth/providers/auth_providers.dart';
 import '../data/mock_setlist_repository.dart';
 import '../data/setlist_repository.dart';
 
-/// Swap for FirestoreSetlistRepository in Phase 2.
+/// Production persists group data; development/test overrides retain fixtures.
 final setlistRepositoryProvider = Provider<SetlistRepository>((ref) {
+  if (!ref.watch(useMockBackendProvider) &&
+      ref.watch(groupRepositoryProvider) is FirestoreGroupRepository) {
+    return FirestoreSetlistRepository(
+        ref.watch(firestoreProvider),
+        ref.watch(firebaseAuthProvider),
+        () => ref.read(selectedGroupIdProvider));
+  }
   final repo = MockSetlistRepository(
       validateItems: ref.watch(songCatalogProvider).validateReferences);
   ref.onDispose(repo.dispose);
@@ -24,7 +35,13 @@ final groupSetlistsProvider = StreamProvider<List<Setlist>>((ref) {
 /// A single setlist by id.
 final setlistByIdProvider =
     FutureProvider.family<Setlist?, String>((ref, setlistId) async {
-  return ref.watch(setlistRepositoryProvider).getSetlist(setlistId);
+  final lists = ref.watch(groupSetlistsProvider);
+  if (ref.watch(selectedGroupIdProvider) == null) return null;
+  if (lists.asData != null) {
+    return lists.asData!.value.where((s) => s.id == setlistId).firstOrNull;
+  }
+  final initial = await ref.watch(groupSetlistsProvider.future);
+  return initial.where((s) => s.id == setlistId).firstOrNull;
 });
 
 /// Filter state for the Setlists screen.
@@ -53,9 +70,9 @@ final filteredSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
       case SetlistFilter.upcoming:
         filtered = setlists
             .where((s) =>
-        s.status == SetlistStatus.published &&
-            s.serviceDateTime.isAfter(now) &&
-            s.id != nextUpcoming?.id) // 👈 exclude "UP NEXT"
+                s.status == SetlistStatus.published &&
+                s.serviceDateTime.isAfter(now) &&
+                s.id != nextUpcoming?.id) // 👈 exclude "UP NEXT"
             .toList();
         filtered.sort((a, b) => a.serviceDateTime.compareTo(b.serviceDateTime));
         break;
@@ -63,8 +80,8 @@ final filteredSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
       case SetlistFilter.previous: // 👈 this was missing
         filtered = setlists
             .where((s) =>
-        s.status == SetlistStatus.published &&
-            !s.serviceDateTime.isAfter(now))
+                s.status == SetlistStatus.published &&
+                !s.serviceDateTime.isAfter(now))
             .toList();
         filtered.sort((a, b) => b.serviceDateTime.compareTo(a.serviceDateTime));
         break;

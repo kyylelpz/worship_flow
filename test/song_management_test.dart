@@ -230,7 +230,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await tester.tap(find.widgetWithText(TextButton, 'Save Draft'));
     await tester.pumpAndSettle();
     final setlist = await tester.runAsync(() =>
         container.read(setlistRepositoryProvider).getSetlist('setlist-3'));

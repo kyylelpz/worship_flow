@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../firebase/navigation_resume.dart';
 import 'package:flutter/material.dart';
 import '../../features/profile/screens/profile_completion_screen.dart';
 import 'package:go_router/go_router.dart';
@@ -40,6 +41,7 @@ final sessionProvider =
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = RouterRefresh(ref);
   ref.onDispose(refresh.dispose);
+  String? resumedUid;
 
   return GoRouter(
     initialLocation: RoutePaths.login,
@@ -56,6 +58,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             : RoutePaths.sessionLoading;
       }
       if (!session.isAuthenticated) {
+        resumedUid = null;
         return loggingIn ? null : RoutePaths.login;
       }
 
@@ -63,6 +66,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return loc == RoutePaths.profileComplete
             ? null
             : RoutePaths.profileComplete;
+      }
+      final resume = ref.read(sessionResumeProvider);
+      if (resume.isLoading || resume.hasError) {
+        return loc == RoutePaths.sessionLoading
+            ? null
+            : RoutePaths.sessionLoading;
+      }
+      if (resumedUid != session.user!.id) {
+        resumedUid = session.user!.id;
+        final saved = resume.valueOrNull;
+        if (saved != null) {
+          ref.read(auth.sessionProvider.notifier).selectGroup(saved.groupId);
+          return saved.setlistId == null
+              ? RoutePaths.setlists
+              : RoutePaths.setlistRehearsalFor(saved.setlistId!);
+        }
       }
       if (loc == RoutePaths.profileComplete ||
           loc == RoutePaths.sessionLoading) {
@@ -89,8 +108,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
           path: RoutePaths.sessionLoading,
-          builder: (_, __) =>
-              const Scaffold(body: Center(child: CircularProgressIndicator()))),
+          builder: (_, __) => Consumer(builder: (context, ref, _) {
+                final resume = ref.watch(sessionResumeProvider);
+                return Scaffold(
+                    body: Center(
+                        child: resume.hasError
+                            ? Column(mainAxisSize: MainAxisSize.min, children: [
+                                const Text(
+                                    'Could not restore your last session. Check your connection.'),
+                                TextButton(
+                                    onPressed: () =>
+                                        ref.invalidate(sessionResumeProvider),
+                                    child: const Text('Retry'))
+                              ])
+                            : const CircularProgressIndicator()));
+              })),
       GoRoute(
           path: RoutePaths.profileComplete,
           builder: (_, __) => ProfileCompletionScreen(
@@ -123,6 +155,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
           path: RoutePaths.setlistEditor,
+          onExit: (_, state) async =>
+              await ref
+                  .read(setlistExitGuardsProvider)[
+                      state.pathParameters['setlistId']]
+                  ?.call() ??
+              true,
           redirect: (_, __) =>
               ref.read(auth.currentRoleProvider)?.canManageSetlists == true
                   ? null

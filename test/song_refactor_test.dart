@@ -251,7 +251,7 @@ void main() {
         await tester.tap(find.text('Done'));
         await tester.pumpAndSettle();
         expect(find.text('Unsaved service'), findsOneWidget);
-        await tester.tap(find.widgetWithText(TextButton, 'Save'));
+        await tester.tap(find.widgetWithText(TextButton, 'Save Draft'));
         await tester.pumpAndSettle();
         final setlist = await tester.runAsync(() =>
             container.read(setlistRepositoryProvider).getSetlist('setlist-1'));
@@ -342,7 +342,7 @@ void main() {
         await tester.ensureVisible(find.text('Done'));
         await tester.tap(find.text('Done'));
         await tester.pumpAndSettle();
-        await tester.tap(find.widgetWithText(TextButton, 'Save'));
+        await tester.tap(find.widgetWithText(TextButton, 'Save Draft'));
         await tester.pumpAndSettle();
         final setlist = await tester.runAsync(() =>
             container.read(setlistRepositoryProvider).getSetlist('setlist-1'));

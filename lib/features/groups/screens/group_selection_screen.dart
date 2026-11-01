@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/firebase/navigation_resume.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/router/route_paths.dart';
 import '../../profile/widgets/invitation_panel.dart';
@@ -96,6 +97,7 @@ class _GroupTile extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () {
+          rememberLocation(ref, ResumeLocation(groupId: group.id));
           ref.read(sessionProvider.notifier).selectGroup(group.id);
           // Router redirect will move us to /setlists automatically.
         },
