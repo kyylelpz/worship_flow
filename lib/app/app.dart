@@ -1,3 +1,4 @@
+import '../core/preferences/user_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,8 +11,10 @@ class WorshipFlowApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(appRouterProvider);
     final mode = ref.watch(themeModeProvider);
+    final restoringPreferences =
+        ref.watch(userPreferencesProvider.select((s) => s.loading));
+    final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
       title: 'Worship Flow',
@@ -20,6 +23,18 @@ class WorshipFlowApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(),
       themeMode: mode,
       routerConfig: router,
+      builder: (context, child) => Stack(fit: StackFit.expand, children: [
+        // Keep the router mounted while hiding default-valued account content.
+        Offstage(
+            offstage: restoringPreferences,
+            child: TickerMode(
+                enabled: !restoringPreferences,
+                child: child ?? const SizedBox.shrink())),
+        if (restoringPreferences)
+          const ColoredBox(
+              color: Color(0xFFF5F5F5),
+              child: Center(child: CircularProgressIndicator())),
+      ]),
     );
   }
 }

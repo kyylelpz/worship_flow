@@ -1,3 +1,4 @@
+import '../../../core/preferences/user_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,10 +6,9 @@ import '../../../core/models/chart_settings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_providers.dart';
 
-/// Device-local chart preferences. Mock-only (in-memory). Firestore/local
-/// persistence arrives with offline storage in Phase 6.
+/// Account-scoped chart preferences; canonical and shared chart data are untouched.
 class ChartSettingsController extends StateNotifier<ChartSettings> {
-  ChartSettingsController() : super(const ChartSettings());
+  ChartSettingsController([super.state = const ChartSettings()]);
 
   void update(ChartSettings Function(ChartSettings) transform) {
     state = transform(state);
@@ -38,7 +38,14 @@ class ChartSettingsController extends StateNotifier<ChartSettings> {
 
 final chartSettingsProvider =
     StateNotifierProvider<ChartSettingsController, ChartSettings>(
-  (ref) => ChartSettingsController(),
+  (ref) {
+    ref.watch(userPreferencesProvider.select((s) => (s.uid, s.loading)));
+    final owner = ref.read(userPreferencesProvider.notifier);
+    final controller =
+        ChartSettingsController(ref.read(userPreferencesProvider).value.chart);
+    controller.addListener(owner.setChart, fireImmediately: false);
+    return controller;
+  },
 );
 
 class ChartSettingsScreen extends ConsumerWidget {
