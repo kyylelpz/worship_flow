@@ -21,9 +21,15 @@ Future<DisplayChart> pumpChart(WidgetTester tester,
     double height = 400,
     double scale = 1,
     EdgeInsets padding = EdgeInsets.zero,
-    bool show = true}) async {
+    bool show = true,
+    String? source,
+    int transpose = 0,
+    ChartSettings settings = const ChartSettings()}) async {
   final chart = const ChartTransformer().display(
-      const ChordProParser().parse(song(count: count)), const ChartSettings());
+      const ChartTransformer().transpose(
+          const ChordProParser().parse(source ?? song(count: count)),
+          semitones: transpose),
+      settings);
   await tester.pumpWidget(MaterialApp(
       home: MediaQuery(
     data:
@@ -34,9 +40,7 @@ Future<DisplayChart> pumpChart(WidgetTester tester,
                 width: width,
                 height: height,
                 child: ChordChartView(
-                    chart: chart,
-                    settings: const ChartSettings(),
-                    showSections: show)))),
+                    chart: chart, settings: settings, showSections: show)))),
   )));
   await tester.pumpAndSettle();
   return chart;
@@ -162,6 +166,127 @@ void main() {
     expect(tester.takeException(), isNull);
     await pumpChart(tester, count: 20, width: 700, height: 180, scale: 1.5);
     expect(tester.getRect(list).height, lessThanOrEqualTo(180));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'manual drag holds highlight, then updates once at idle without rebuilding lyrics',
+      (tester) async {
+    final chart = await pumpChart(tester);
+    final first = chart.sections.firstWhere((s) => s.label == 'Intro');
+    final last = chart.sections.last;
+    final body =
+        tester.widget<AnchoredLyricLine>(find.byType(AnchoredLyricLine).first);
+    final active = tester
+        .widget<ValueListenableBuilder<String?>>(
+            find.byType(ValueListenableBuilder<String?>))
+        .valueListenable;
+    var updates = 0;
+    void changed() {
+      updates++;
+    }
+
+    active.addListener(changed);
+    final viewport = tester.getRect(find.byKey(const ValueKey('chart-scroll')));
+    final gesture = await tester
+        .startGesture(Offset(viewport.left + 24, viewport.center.dy));
+    for (var step = 0; step < 3; step++) {
+      await gesture.moveBy(const Offset(0, -1800));
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(chartScroll(tester).position.isScrollingNotifier.value, true);
+      expect(selected(tester, first.id), true);
+      expect(updates, 0);
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(selected(tester, last.id), true);
+    expect(updates, 1);
+    expect(
+        tester.widget<AnchoredLyricLine>(find.byType(AnchoredLyricLine).first),
+        same(body));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(updates, 1);
+    active.removeListener(changed);
+  });
+  testWidgets(
+      'instant jumps highlight immediately once, even when the target is near chart bottom',
+      (tester) async {
+    final source =
+        '{key: C}\n{section: Intro}\n${List.filled(15, "[C]A lyric line").join("\n")}\n{section: Verse}\n[C]Short verse\n{section: Outro}\n[C]Short ending';
+    final chart = await pumpChart(tester, source: source);
+    final verse = chart.sections.firstWhere((s) => s.label == 'Verse');
+    final active = tester
+        .widget<ValueListenableBuilder<String?>>(
+            find.byType(ValueListenableBuilder<String?>))
+        .valueListenable;
+    var updates = 0;
+    void changed() {
+      updates++;
+    }
+
+    active.addListener(changed);
+    final body =
+        tester.widget<AnchoredLyricLine>(find.byType(AnchoredLyricLine).first);
+    await tester.tap(find.byKey(ValueKey('section-bubble-${verse.id}')));
+    expect(active.value, verse.id);
+    expect(chartScroll(tester).offset, greaterThan(0));
+    await tester.pumpAndSettle();
+    expect(selected(tester, verse.id), true);
+    expect(updates, 1);
+    expect(
+        tester.widget<AnchoredLyricLine>(find.byType(AnchoredLyricLine).first),
+        same(body));
+    await tester.tap(find.byKey(ValueKey('section-bubble-${verse.id}')));
+    await tester.pumpAndSettle();
+    expect(updates, 1);
+    // A later manual move to the bottom still activates the final section.
+    await tester.drag(
+        find.byKey(const ValueKey('chart-scroll')), const Offset(0, 200));
+    await tester.pumpAndSettle();
+    await tester.drag(
+        find.byKey(const ValueKey('chart-scroll')), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    expect(selected(tester, chart.sections.last.id), true);
+    active.removeListener(changed);
+  });
+  testWidgets(
+      'section positions refresh after transposition, typography, viewport and song changes',
+      (tester) async {
+    final initial = await pumpChart(tester, count: 4);
+    final firstChorus = initial.sections.firstWhere((s) => s.label == 'Chorus');
+    await tester.tap(find.byKey(ValueKey('section-bubble-${firstChorus.id}')));
+    await tester.pumpAndSettle();
+    final scaled = await pumpChart(tester,
+        count: 4,
+        transpose: 2,
+        scale: 1.5,
+        width: 500,
+        settings: const ChartSettings(lyricsFontSize: 24, chordsFontSize: 28));
+    final repeats = scaled.sections.where((s) => s.label == 'Chorus').toList();
+    expect(find.widgetWithText(TextButton, 'CH1'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'CH2'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('section-bubble-${repeats[1].id}')));
+    await tester.pumpAndSettle();
+    expect(selected(tester, repeats[1].id), true);
+    await tester.drag(
+        find.byKey(const ValueKey('chart-scroll')), const Offset(0, -10000));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<ValueListenableBuilder<String?>>(
+                find.byType(ValueListenableBuilder<String?>))
+            .valueListenable
+            .value,
+        scaled.sections.last.id);
+    final next = await pumpChart(tester, count: 3);
+    expect(chartScroll(tester).offset, 0);
+    expect(
+        selected(
+            tester, next.sections.firstWhere((s) => s.label == 'Intro').id),
+        true);
+    final chorus = next.sections.firstWhere((s) => s.label == 'Chorus');
+    await tester.tap(find.byKey(ValueKey('section-bubble-${chorus.id}')));
+    await tester.pumpAndSettle();
+    expect(selected(tester, chorus.id), true);
     expect(tester.takeException(), isNull);
   });
 }
