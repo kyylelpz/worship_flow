@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:metronome/metronome_platform_interface.dart';
 
@@ -30,6 +31,15 @@ abstract class MetronomeAudio {
 
 class NativeMetronomeAudio implements MetronomeAudio {
   bool _ready = false;
+  static const _androidChannel = MethodChannel('metronome');
+  bool get _android =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  Future<T?> _androidCall<T>(String method,
+          [Map<String, dynamic>? arguments]) =>
+      _androidChannel.invokeMethod<T>(method, arguments).timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => throw TimeoutException(
+              'Android metronome $method did not reply. Fully rebuild the app.'));
   MetronomePlatform get _platform => MetronomePlatform.instance;
 
   @override
@@ -45,19 +55,45 @@ class NativeMetronomeAudio implements MetronomeAudio {
         ? 'pcm'
         : 'wav';
     // Await the platform initializer itself: the package facade does not await it.
-    await _platform.init('assets/audio/tick.$extension',
-        accentedPath: 'assets/audio/accent.$extension',
-        bpm: pattern.bpm,
-        timeSignature: pattern.beats,
-        sampleRate: 44100,
-        enableTickCallback: false);
+    if (_android) {
+      final normal = await rootBundle.load('assets/audio/tick.pcm');
+      final accent = await rootBundle.load('assets/audio/accent.pcm');
+      // Use the same plugin channel directly so native errors are not swallowed
+      // by the package's Dart wrapper. MainActivity supplies missing void replies.
+      _ready = true; // Clean up even if native initialization times out/fails.
+      await _androidCall<void>('init', {
+        'mainFileBytes': normal.buffer
+            .asUint8List(normal.offsetInBytes, normal.lengthInBytes),
+        'accentedFileBytes': accent.buffer
+            .asUint8List(accent.offsetInBytes, accent.lengthInBytes),
+        'bpm': pattern.bpm,
+        'timeSignature': pattern.beats,
+        'sampleRate': 44100,
+        'volume': 0.75,
+        'enableTickCallback': false,
+      });
+    } else {
+      await _platform.init('assets/audio/tick.$extension',
+          accentedPath: 'assets/audio/accent.$extension',
+          bpm: pattern.bpm,
+          timeSignature: pattern.beats,
+          sampleRate: 44100,
+          enableTickCallback: false);
+    }
     _ready = true;
   }
 
   @override
   Future<void> play() async {
-    await _platform.play();
-    if (await _platform.isPlaying() != true) {
+    if (_android) {
+      await _androidCall<void>('play');
+    } else {
+      await _platform.play();
+    }
+    final playing = _android
+        ? await _androidCall<bool>('isPlaying')
+        : await _platform.isPlaying();
+    if (playing != true) {
       throw StateError('Audio playback could not start.');
     }
   }
@@ -66,9 +102,23 @@ class NativeMetronomeAudio implements MetronomeAudio {
   Future<void> stop() async {
     if (!_ready) return;
     // Pause before flushing so queued Android AudioTrack samples are discarded.
-    await _platform.pause();
-    await _platform.destroy();
-    _ready = false;
+    try {
+      if (_android) {
+        await _androidCall<void>('pause');
+      } else {
+        await _platform.pause();
+      }
+    } finally {
+      try {
+        if (_android) {
+          await _androidCall<void>('destroy');
+        } else {
+          await _platform.destroy();
+        }
+      } finally {
+        _ready = false;
+      }
+    }
   }
 }
 
@@ -90,7 +140,6 @@ class RehearsalMetronome extends ValueNotifier<bool> {
     if (_operations.owner != this) _operations.owner?.stop();
     _operations.owner = this;
     final generation = ++_generation;
-    value = true;
     final result = _pending.then((_) async {
       if (_disposed || generation != _generation) return;
       await audio.stop();
@@ -101,10 +150,20 @@ class RehearsalMetronome extends ValueNotifier<bool> {
         return;
       }
       await audio.play();
+      if (!_disposed && generation == _generation) {
+        value = true;
+      } else {
+        await audio.stop();
+      }
     });
     _pending = result.catchError((Object error, StackTrace stack) async {
-      await audio.stop();
       if (!_disposed && generation == _generation) value = false;
+      if (kDebugMode) debugPrint('[Metronome] start failed: $error\n$stack');
+      try {
+        await audio.stop();
+      } catch (cleanupError) {
+        if (kDebugMode) debugPrint('[Metronome] cleanup failed: $cleanupError');
+      }
     });
     return result;
   }

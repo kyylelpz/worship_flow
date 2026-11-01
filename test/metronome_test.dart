@@ -21,9 +21,11 @@ class FakeAudio implements MetronomeAudio {
   int playing = 0;
   int starts = 0;
   Completer<void>? preparation;
+  Object? failure;
   @override
   Future<void> prepare(MetronomePattern pattern) async {
     patterns.add(pattern);
+    if (failure != null) throw failure!;
     await preparation?.future;
   }
 
@@ -41,6 +43,91 @@ class FakeAudio implements MetronomeAudio {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('unanswered Android init fails instead of hanging forever',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final unanswered = Completer<void>();
+    messenger.setMockMethodCallHandler(const MethodChannel('metronome'),
+        (call) async {
+      if (call.method == 'init') {
+        await unanswered.future;
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        const MethodChannel('metronome'), null));
+    final player = RehearsalMetronome(NativeMetronomeAudio());
+    final result = player.start(const MetronomePattern(120, 4));
+    final failure = expectLater(result, throwsA(isA<TimeoutException>()));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await failure;
+    expect(player.value, false);
+    unanswered.complete();
+    await tester.pump();
+    player.dispose();
+    await tester.pump();
+    debugDefaultTargetPlatformOverride = null;
+  });
+  test('accent asset is stronger than the normal tick', () async {
+    Future<int> peak(String path) async {
+      final data = await rootBundle.load(path);
+      var peak = 0;
+      for (var i = 0; i < data.lengthInBytes; i += 2) {
+        final sample = data.getInt16(i, Endian.little).abs();
+        if (sample > peak) {
+          peak = sample;
+        }
+      }
+      return peak;
+    }
+
+    expect(await peak('assets/audio/accent.pcm'),
+        greaterThan(await peak('assets/audio/tick.pcm')));
+  });
+  test('Android init and play errors propagate instead of being swallowed',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    for (final stage in ['init', 'play']) {
+      messenger.setMockMethodCallHandler(const MethodChannel('metronome'),
+          (call) async {
+        if (call.method == stage) {
+          throw PlatformException(
+              code: 'metronome_native_error', message: stage);
+        }
+        return null;
+      });
+      final audio = NativeMetronomeAudio();
+      if (stage == 'init') {
+        await expectLater(audio.prepare(const MetronomePattern(100, 4)),
+            throwsA(isA<PlatformException>()));
+      } else {
+        await audio.prepare(const MetronomePattern(100, 4));
+        await expectLater(audio.play(), throwsA(isA<PlatformException>()));
+        await audio.stop();
+      }
+    }
+    messenger.setMockMethodCallHandler(const MethodChannel('metronome'), null);
+  });
+  test(
+      'ON state requires confirmed playback; pending initialization is cancellable',
+      () async {
+    final audio = FakeAudio()..preparation = Completer<void>();
+    final player = RehearsalMetronome(audio);
+    final pending = player.start(const MetronomePattern(120, 4));
+    await Future<void>.delayed(Duration.zero);
+    expect(player.value, false);
+    audio.preparation!.complete();
+    await pending;
+    expect(player.value, true);
+    player.dispose();
+  });
   test('late old-route disposal never releases the new audio owner', () async {
     final audio = FakeAudio();
     final old = RehearsalMetronome(audio);
@@ -190,6 +277,14 @@ void main() {
     await tester.tap(find.byTooltip('Stop metronome'));
     await tester.pumpAndSettle();
     expect(audio.playing, 0);
+    audio.failure = StateError('Initialization failed');
+    await tester.tap(find.byTooltip('Start metronome'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Metronome audio unavailable. Try again.'), findsOneWidget);
+    expect(find.byTooltip('Start metronome'), findsOneWidget);
+    expect(audio.playing, 0);
+    audio.failure = null;
     await tester.tap(find.byTooltip('Start metronome'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Open setlist'));
