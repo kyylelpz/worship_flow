@@ -1,3 +1,5 @@
+import '../../../core/models/edit_conflict.dart';
+import '../../../core/widgets/edit_conflict_dialog.dart';
 import 'dart:convert';
 import 'package:uuid/uuid.dart';
 import '../data/setlist_repository.dart';
@@ -75,29 +77,30 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     _load();
   }
 
-  Future<void> _load() async {
-    if (widget.setlistId == 'new') {
+  Future<void> _load({bool reloading = false}) async {
+    if (widget.setlistId == 'new' && !_persisted) {
       final now = DateTime.now();
 
       final daysUntilSunday = (DateTime.sunday - now.weekday + 7) % 7;
-      final nextSunday = now.add(Duration(days: daysUntilSunday == 0 ? 7 : daysUntilSunday));
+      final nextSunday =
+          now.add(Duration(days: daysUntilSunday == 0 ? 7 : daysUntilSunday));
 
-      _serviceDateTime = DateTime(nextSunday.year, nextSunday.month, nextSunday.day, 8, 30);
+      _serviceDateTime =
+          DateTime(nextSunday.year, nextSunday.month, nextSunday.day, 8, 30);
       _nameController.text =
-      '${DateFormat('MMM d').format(_serviceDateTime!)} - Sunday Service';
+          '${DateFormat('MMM d').format(_serviceDateTime!)} - Sunday Service';
       _loaded = true;
       _baseline = _snapshot();
       return;
     }
     try {
-      final setlist = await ref
-          .read(setlistRepositoryProvider)
-          .getSetlist(widget.setlistId);
+      final setlist = await ref.read(setlistRepositoryProvider).getSetlist(_id);
       if (!mounted) return;
       if (setlist == null) {
         setState(() {
           _missing = true;
           _loaded = true;
+          _baseline = _snapshot();
         });
         return;
       }
@@ -113,7 +116,14 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
         _baseline = _snapshot();
       });
     } catch (e) {
-      if (mounted) setState(() => _loadError = '$e');
+      if (mounted) {
+        if (reloading) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Could not reload. Your edits are kept: $e')));
+        } else {
+          setState(() => _loadError = '$e');
+        }
+      }
     }
   }
 
@@ -167,6 +177,15 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(publish ? 'Setlist published.' : 'Draft saved.')));
       return true;
+    } on EditConflict catch (conflict) {
+      if (mounted) {
+        // Keep the editor locked while deciding; never advance its revision on failure.
+        final reload = await confirmConflictReload(context, conflict);
+        if (!mounted) return false;
+        if (reload) await _load(reloading: true);
+        if (mounted) setState(() => _saving = false);
+      }
+      return false;
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);

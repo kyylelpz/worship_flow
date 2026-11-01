@@ -1,3 +1,4 @@
+import '../../../core/models/edit_conflict.dart';
 import 'dart:async';
 
 import '../../../core/mock_data/mock_setlists.dart';
@@ -173,7 +174,7 @@ class MockSetlistRepository
     validateItems?.call(groupId, items);
     final old = _find(id);
     if (expectedRevision != null && old?.revision != expectedRevision) {
-      throw StateError('Setlist changed. Reopen it before saving.');
+      throw EditConflict('Setlist', deleted: old == null);
     }
     final value = Setlist(
         id: id,

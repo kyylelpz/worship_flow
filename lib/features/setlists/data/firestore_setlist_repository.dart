@@ -1,3 +1,4 @@
+import '../../../core/models/edit_conflict.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -45,8 +46,7 @@ class FirestoreSetlistRepository
       final old = await tx.get(ref);
       final before = old.exists ? setlistFromData(old.data()!) : null;
       if (expectedRevision != null && before?.revision != expectedRevision) {
-        throw StateError(
-            'This setlist was changed or deleted by another editor. Reopen it before saving; your local edits have been kept.');
+        throw EditConflict('Setlist', deleted: before == null);
       }
       final next = change(before);
       if (auth.currentUser?.uid != uid || selectedGroup() != g) {

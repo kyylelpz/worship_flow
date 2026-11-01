@@ -1,3 +1,5 @@
+import '../../../core/models/edit_conflict.dart';
+import '../../../core/widgets/edit_conflict_dialog.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -35,6 +37,8 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
   final List<Arrangement> _draftArrangements = [];
   bool _favorite = false, _loaded = false, _saving = false;
   String? _error;
+  Song? _baselineSong;
+  bool _recordDeleted = false;
   (String, String, String, String, bool)? _initialMetadata;
   bool _allowExit = false, _leaving = false;
   (String, String, String, String, bool) get _metadata => (
@@ -124,6 +128,8 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.songId != widget.songId) {
       _loaded = false;
+      _baselineSong = null;
+      _recordDeleted = false;
       _initialMetadata = null;
       _allowExit = false;
       _error = null;
@@ -151,6 +157,25 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
     super.dispose();
   }
 
+  void _applyMetadata(Song value) {
+    _baselineSong = value;
+    for (final v in _vocalists) {
+      v.dispose();
+    }
+    _vocalists.clear();
+    _title.text = value.title;
+    _artist.text = value.artist;
+    _category.text = value.category;
+    _categoryChoice =
+        const ['Praise', 'Worship', 'Communion'].contains(value.category)
+            ? value.category
+            : 'Other';
+    for (final v in value.vocalistKeys) {
+      _addPreset(v.vocalistName, v.key);
+    }
+    _favorite = value.isFavorite;
+  }
+
   Future<void> _save(Song? existing) async {
     if (!_form.currentState!.validate() || _saving || _groupId == null) return;
     final editedSongId = widget.songId;
@@ -175,7 +200,7 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
       if (existing == null) {
         id = await repo.createSong(_groupId, song);
       } else {
-        await repo.updateSong(_groupId, song);
+        await repo.updateSong(_groupId, song, expected: _baselineSong);
         id = existing.id;
       }
       if (!mounted ||
@@ -202,6 +227,30 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
               : RoutePaths.songDetailsFor(id));
         }
       });
+    } on EditConflict catch (conflict) {
+      if (mounted &&
+          await confirmConflictReload(context, conflict) &&
+          mounted) {
+        try {
+          final latest = await ref
+              .read(songRepositoryProvider)
+              .getSong(_groupId, editedSongId);
+          if (!mounted) return;
+          setState(() {
+            _recordDeleted = latest == null;
+            _baselineSong = latest;
+            if (latest != null) {
+              _applyMetadata(latest);
+            }
+            _initialMetadata = _metadata;
+          });
+        } catch (error) {
+          if (mounted) {
+            setState(
+                () => _error = 'Could not reload. Your edits are kept: $error');
+          }
+        }
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _error = '$error');
@@ -214,16 +263,43 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
   }
 
   Future<void> _editArrangement(Song? song, Arrangement? arrangement) async {
-    final value = await Navigator.of(context).push<Arrangement>(
-        MaterialPageRoute(
+    final value =
+        await Navigator.of(context).push<Arrangement>(MaterialPageRoute(
             fullscreenDialog: true,
             builder: (_) => ArrangementEditorScreen(
                     arrangement: arrangement,
+                    onSave: song == null
+                        ? null
+                        : (value, expected) async {
+                            final repo = ref.read(songRepositoryProvider);
+                            if (arrangement == null) {
+                              await repo.createArrangement(
+                                  _groupId!, song.id, value);
+                            } else {
+                              await repo.updateArrangement(
+                                  _groupId!, song.id, value,
+                                  expected: expected);
+                            }
+                          },
+                    onReload: song == null
+                        ? null
+                        : () async {
+                            final latest = await ref
+                                .read(songRepositoryProvider)
+                                .getSong(_groupId!, song.id);
+                            return latest?.arrangements
+                                .where((a) => a.id == arrangement?.id)
+                                .firstOrNull;
+                          },
                     vocalistKeys: [
                       for (final v in _vocalists)
                         VocalistKey(vocalistName: v.name.text, key: v.key.text)
                     ])));
     if (value == null || !mounted) return;
+    if (song != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Arrangement saved.')));
+    }
     if (song == null) {
       setState(() {
         final index = _draftArrangements.indexWhere((a) => a.id == value.id);
@@ -233,15 +309,6 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
           _draftArrangements[index] = value;
         }
       });
-    } else {
-      await performSongAction(context, () async {
-        final repo = ref.read(songRepositoryProvider);
-        if (arrangement == null) {
-          await repo.createArrangement(_groupId!, song.id, value);
-        } else {
-          await repo.updateArrangement(_groupId!, song.id, value);
-        }
-      }, 'Arrangement saved.');
     }
   }
 
@@ -291,7 +358,9 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
         ref.watch(canManageSongsProvider) && currentGroup == _groupId;
     final song = widget.songId.isEmpty
         ? null
-        : ref.watch(songByIdProvider(widget.songId));
+        : _recordDeleted
+            ? null
+            : ref.watch(songByIdProvider(widget.songId)) ?? _baselineSong;
     if (loading) {
       return _guardBack(Scaffold(
           appBar: AppBar(leading: _backButton()),
@@ -311,17 +380,7 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
     }
     if (!_loaded) {
       if (song != null) {
-        _title.text = song.title;
-        _artist.text = song.artist;
-        _category.text = song.category;
-        _categoryChoice =
-            const ['Praise', 'Worship', 'Communion'].contains(song.category)
-                ? song.category
-                : 'Other';
-        for (final v in song.vocalistKeys) {
-          _addPreset(v.vocalistName, v.key);
-        }
-        _favorite = song.isFavorite;
+        _applyMetadata(song);
       }
       _initialMetadata = _metadata;
       _loaded = true;

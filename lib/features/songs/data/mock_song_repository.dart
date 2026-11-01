@@ -191,8 +191,13 @@ class MockSongRepository implements SongRepository {
   }
 
   @override
-  Future<void> updateSong(String groupId, Song song) async {
+  Future<void> updateSong(String groupId, Song song, {Song? expected}) async {
     await _authorize(groupId, write: true);
+    if (expected != null) {
+      checkSongEdit(
+          catalog.snapshot(groupId).where((s) => s.id == song.id).firstOrNull,
+          expected);
+    }
     final existing = _find(groupId, song.id);
     SongValidation.song(song);
     catalog._put(
@@ -226,8 +231,18 @@ class MockSongRepository implements SongRepository {
 
   @override
   Future<void> updateArrangement(
-      String groupId, String songId, Arrangement arrangement) async {
+      String groupId, String songId, Arrangement arrangement,
+      {Arrangement? expected}) async {
     await _authorize(groupId, write: true);
+    if (expected != null) {
+      final current =
+          catalog.snapshot(groupId).where((s) => s.id == songId).firstOrNull;
+      checkArrangementEdit(
+          current?.arrangements
+              .where((a) => a.id == arrangement.id)
+              .firstOrNull,
+          expected);
+    }
     final song = _find(groupId, songId);
     final existing = _arrangement(song, arrangement.id);
     SongValidation.arrangement(arrangement);

@@ -362,3 +362,12 @@ Paths below are relative to `lib/`; every Dart file with non-whitespace content 
 `firestore_tests/` contains only development test dependencies and Firestore security/client-transaction tests. `firebase.json`, `.firebaserc`, `firestore.rules` and `firestore.indexes.json` configure the existing project and emulators. Client Firebase config is public configuration, not a server credential.
 
 Whitespace-only placeholders excluded from the inventory: `core/widgets/{app_scaffold,empty_state,loading_overlay,primary_button,role_selector_sheet,section_header,status_chip}.dart`, `features/songs/widgets/song_card.dart`.
+
+
+### Phase 3D — concurrent editing
+
+Setlist commits retain their existing revision check inside the Firestore transaction. A stale revision or remotely deleted record raises a typed conflict. Reload Latest explicitly discards the local draft and loads the latest draft/published baseline; Keep Editing, Cancel and dialog dismissal preserve it and its original revision. Retrying cannot silently overwrite changes or recreate a deleted Setlist. Failed reloads retain the local draft.
+
+Song metadata and Arrangement editors pass their opening snapshots into transaction-time comparisons. Metadata saves compare metadata/shared vocal presets only and retain current Arrangements; Arrangement saves compare that Arrangement’s exact source and metadata and retain unrelated edits. Failed Arrangement commits now leave the Arrangement editor open, including its source draft. Explicit Reload Latest replaces the local fields; deleted records cannot be recreated through update operations. New-song Arrangements remain local until the parent Song is saved.
+
+This uses existing Spark-compatible transactions, schema, role rules and reference guards, with no deployment or new indexes required. There is no automatic merge, force overwrite, revision history or offline conflict queue. Snapshot comparison detects changed content, not a change reverted to identical content. Legacy repository callers remain compatible; callers implementing an editing workflow must pass `expected` to Song/Arrangement updates. These client conflict checks supplement existing backend authorization; they are not a restriction against a custom authorized client intentionally overwriting content.

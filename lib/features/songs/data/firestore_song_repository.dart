@@ -175,8 +175,11 @@ class FirestoreSongRepository implements SongRepository {
   Song _required(Song? s) =>
       s ?? (throw const SongRepositoryException('Song not found.'));
   @override
-  Future<void> updateSong(String g, Song s) => _mutate(g, s.id,
-      (old, _) => s.copyWith(arrangements: _required(old).arrangements));
+  Future<void> updateSong(String g, Song s, {Song? expected}) =>
+      _mutate(g, s.id, (old, _) {
+        if (expected != null) checkSongEdit(old, expected);
+        return s.copyWith(arrangements: _required(old).arrangements);
+      });
   @override
   Future<void> deleteSong(String g, String id) => _mutate(g, id, (old, _) {
         _required(old);
@@ -201,8 +204,14 @@ class FirestoreSongRepository implements SongRepository {
   }
 
   @override
-  Future<void> updateArrangement(String g, String id, Arrangement a) =>
+  Future<void> updateArrangement(String g, String id, Arrangement a,
+          {Arrangement? expected}) =>
       _mutate(g, id, (old, entries) {
+        if (expected != null) {
+          checkArrangementEdit(
+              old?.arrangements.where((v) => v.id == a.id).firstOrNull,
+              expected);
+        }
         final song = _required(old);
         final previous =
             song.arrangements.where((v) => v.id == a.id).firstOrNull;
