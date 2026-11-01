@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/models/app_user.dart';
@@ -12,6 +11,7 @@ import '../../../core/models/worship_group.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../auth/data/firebase_auth_repository.dart';
 import 'group_repository.dart';
+import 'firestore_invitation_repository.dart';
 
 GroupMember memberFromFirestore(Map<String, dynamic> data,
     {String? expectedUid, String? expectedGroupId}) {
@@ -59,9 +59,8 @@ class _GroupSnapshot {
 
 class FirestoreGroupRepository
     implements GroupRepository, GroupCreationRepository {
-  FirestoreGroupRepository(this.firestore, this.functions, this.auth);
+  FirestoreGroupRepository(this.firestore, this.auth);
   final FirebaseFirestore firestore;
-  final FirebaseFunctions functions;
   final FirebaseAuth auth;
 
   WorshipGroup _group(
@@ -202,16 +201,52 @@ class FirestoreGroupRepository
       String customPosition = '',
       required String requestId}) async {
     try {
-      final result = await functions
-          .httpsCallable('createGroup')
-          .call<Map<String, dynamic>>({
-        'name': name,
-        'churchName': churchName,
-        'position': position.name,
-        'customPosition': customPosition,
-        'requestId': requestId,
+      final user = auth.currentUser;
+      if (user == null) throw const AccountException('Please sign in first.');
+      if (!RegExp(r'^[A-Za-z0-9-]{16,80}$').hasMatch(requestId)) {
+        throw const AccountException('Invalid group request ID.');
+      }
+      final groupId = requestId;
+      await firestore.runTransaction((tx) async {
+        final index =
+            firestore.doc('profiles/${user.uid}/memberships/$groupId');
+        if ((await tx.get(index)).exists) return;
+        final profile =
+            (await tx.get(firestore.doc('profiles/${user.uid}'))).data()!;
+        if (profile['profileComplete'] != true) {
+          throw const AccountException('Complete your profile first.');
+        }
+        final now = FieldValue.serverTimestamp();
+        tx.set(firestore.doc('groups/$groupId'), {
+          'name': name.trim(),
+          'churchName': churchName.trim(),
+          'createdBy': user.uid,
+          'administratorUid': user.uid,
+          'memberCount': 1,
+          'accentColorValue': 0xff2f7a6b,
+          'createdAt': now,
+          'updatedAt': now,
+        });
+        tx.set(firestore.doc('groups/$groupId/members/${user.uid}'), {
+          'uid': user.uid,
+          'groupId': groupId,
+          'firstName': profile['firstName'],
+          'lastName': profile['lastName'],
+          'role': 'administrator',
+          'position': position.name,
+          'customPosition':
+              position == MembershipPosition.other ? customPosition.trim() : '',
+          'createdAt': now,
+          'updatedAt': now,
+        });
+        tx.set(index, {
+          'uid': user.uid,
+          'groupId': groupId,
+          'createdAt': now,
+          'updatedAt': now
+        });
       });
-      return result.data['groupId'] as String;
+      return groupId;
     } catch (error) {
       throw accountFailure(error);
     }
@@ -223,12 +258,22 @@ class FirestoreGroupRepository
           'Use group creation with an explicit position and request ID.');
   @override
   Future<void> joinGroup(String inviteCode) => throw const AccountException(
-      'Invitation joining is not available in this phase.');
+      'Accept an email invitation from Invitation Requests.');
   @override
   Future<void> updateMemberRole(
-          {required String groupId,
-          required String userId,
-          required UserRole role}) =>
-      throw const AccountException(
-          'Membership management is not available in this phase.');
+      {required String groupId,
+      required String userId,
+      required UserRole role}) async {
+    final target = (await getGroup(groupId))
+        ?.members
+        .where((m) => m.uid == userId)
+        .firstOrNull;
+    if (target == null) throw const AccountException('Member unavailable.');
+    await FirestoreInvitationRepository(firestore, auth).updateMember(
+        groupId: groupId,
+        uid: userId,
+        role: role,
+        position: target.position,
+        customPosition: target.customPosition);
+  }
 }

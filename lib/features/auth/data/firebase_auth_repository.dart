@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -9,6 +8,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../../../core/models/app_user.dart';
 import '../../../core/models/user_role.dart';
 import 'auth_repository.dart';
+import 'google_sign_in_failures.dart';
 
 AccountException accountFailure(Object error) {
   if (error is AccountException) return error;
@@ -30,7 +30,7 @@ AccountException accountFailure(Object error) {
         'This operation requires a verified Google account and authorized membership.',
       'not-found' ||
       'unimplemented' =>
-        'The Firebase foundation functions are not deployed. Follow the Firebase setup instructions.',
+        'Firebase data is unavailable. Check configuration and retry.',
       _ => error.message ?? 'Firebase operation failed. Please retry.',
     });
   }
@@ -50,7 +50,8 @@ AppUser userFromProfile(String uid, Map<String, dynamic> data) {
       avatarInitials:
           '${first.isEmpty ? '' : String.fromCharCode(first.runes.first)}${last.isEmpty ? '' : String.fromCharCode(last.runes.first)}'
               .toUpperCase(),
-      profileComplete: data['profileComplete'] == true);
+      profileComplete: data['profileComplete'] == true,
+      allowInvitations: data['allowInvitations'] != false);
 }
 
 class FirebaseAuthRepository
@@ -58,10 +59,9 @@ class FirebaseAuthRepository
         AuthRepository,
         PersistentAuthRepository,
         AccountProfileRepository {
-  FirebaseAuthRepository(this.auth, this.firestore, this.functions);
+  FirebaseAuthRepository(this.auth, this.firestore);
   final FirebaseAuth auth;
   final FirebaseFirestore firestore;
-  final FirebaseFunctions functions;
   Future<void>? _googleReady;
 
   Future<void> _ensureAccount() async {
@@ -71,14 +71,46 @@ class FirebaseAuthRepository
         !user.providerData.any((p) => p.providerId == 'google.com')) {
       throw const AccountException('A verified Google account is required.');
     }
-    await functions.httpsCallable('ensureAccount').call<void>();
+    final ref = firestore.doc('profiles/${user.uid}');
+    await firestore.runTransaction((tx) async {
+      final existing = await tx.get(ref);
+      if (existing.exists) {
+        final d = existing.data()!;
+        if (!d.containsKey('allowInvitations')) {
+          final complete = d['profileComplete'] == true;
+          tx.update(ref, {
+            'allowInvitations': complete,
+            'updatedAt': FieldValue.serverTimestamp()
+          });
+          if (complete) {
+            tx.set(firestore.doc('emailDirectory/${user.email!.toLowerCase()}'),
+                {'uid': user.uid});
+          }
+        }
+        return;
+      }
+      final parts = (user.displayName ?? '').trim().split(RegExp(r'\s+'));
+      tx.set(ref, {
+        'firstName': parts.first.length <= 80 ? parts.first : '',
+        'lastName':
+            parts.skip(1).join(' ').length <= 80 ? parts.skip(1).join(' ') : '',
+        'email': user.email!,
+        'profileComplete': false,
+        'allowInvitations': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'completedAt': null,
+      });
+    });
   }
 
   @override
   Future<AuthResult> signInWithGoogle() async {
+    var stage = 'restore';
     try {
       if (auth.currentUser == null) {
         if (kIsWeb) {
+          stage = 'firebase-popup';
           await auth.signInWithPopup(GoogleAuthProvider()
             ..setCustomParameters({'prompt': 'select_account'}));
         } else {
@@ -89,41 +121,42 @@ class FirebaseAuthRepository
           }
           const client = String.fromEnvironment('WF_GOOGLE_CLIENT_ID');
           const server = String.fromEnvironment('WF_GOOGLE_SERVER_CLIENT_ID');
+          stage = 'google-initialize';
           await (_googleReady ??= GoogleSignIn.instance.initialize(
-              clientId: client.isEmpty ? null : client,
+              // Android identifies the app by package + signing certificate;
+              // its serverClientId is the Web OAuth client, never the Android ID.
+              clientId: defaultTargetPlatform == TargetPlatform.android ||
+                      client.isEmpty
+                  ? null
+                  : client,
               serverClientId: server.isEmpty ? null : server));
+          stage = 'google-authenticate';
           final account = await GoogleSignIn.instance.authenticate();
           final idToken = account.authentication.idToken;
           if (idToken == null) {
             throw const AccountException(
                 'Google did not return an identity token. Check OAuth configuration.');
           }
+          stage = 'firebase-credential';
           await auth.signInWithCredential(
               GoogleAuthProvider.credential(idToken: idToken));
         }
       }
+      stage = 'profile-load';
       final user = await getCurrentUser();
       if (user == null) {
         throw const AccountException(
             'Google Sign-In did not complete. Please retry.');
       }
       return AuthResult(user: user, role: UserRole.worshipTrainee);
-    } on GoogleSignInException catch (error) {
-      if (error.code == GoogleSignInExceptionCode.canceled) {
-        throw const SignInCancelled();
-      }
-      throw const AccountException(
-          'Google Sign-In failed. Check network, signing SHA and OAuth client configuration.');
-    } on FirebaseAuthException catch (error) {
-      if (const [
-        'popup-closed-by-user',
-        'cancelled-popup-request',
-        'web-context-cancelled'
-      ].contains(error.code)) {
-        throw const SignInCancelled();
-      }
-      throw accountFailure(error);
-    } catch (error) {
+    } on GoogleSignInException catch (error, stack) {
+      logGoogleSignInFailure(error, stack, stage);
+      throw googleSignInFailure(error);
+    } on FirebaseAuthException catch (error, stack) {
+      logGoogleSignInFailure(error, stack, stage);
+      throw firebaseGoogleSignInFailure(error);
+    } catch (error, stack) {
+      logGoogleSignInFailure(error, stack, stage);
       throw accountFailure(error);
     }
   }
@@ -214,9 +247,37 @@ class FirebaseAuthRepository
     try {
       final uid = auth.currentUser?.uid;
       if (uid == null) throw const AccountException('Please sign in again.');
-      await functions
-          .httpsCallable('completeProfile')
-          .call<void>({'firstName': firstName, 'lastName': lastName});
+      final first = firstName.trim(), last = lastName.trim();
+      if ([first, last].any((n) =>
+          n.isEmpty ||
+          n.length > 80 ||
+          RegExp(r'[\x00-\x1f\x7f]').hasMatch(n))) {
+        throw const AccountException(
+            'First and last names are required (maximum 80 characters).');
+      }
+      await firestore.runTransaction((tx) async {
+        final ref = firestore.doc('profiles/$uid');
+        final doc = await tx.get(ref);
+        final data = doc.data()!;
+        final allow = data['profileComplete'] == true
+            ? data['allowInvitations'] != false
+            : true;
+        tx.update(ref, {
+          'firstName': first,
+          'lastName': last,
+          'email': auth.currentUser!.email!,
+          'profileComplete': true,
+          'allowInvitations': allow,
+          'completedAt': data['completedAt'] ?? FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp()
+        });
+        if (allow) {
+          tx.set(
+              firestore.doc(
+                  'emailDirectory/${auth.currentUser!.email!.toLowerCase()}'),
+              {'uid': uid});
+        }
+      });
       if (uid != auth.currentUser?.uid) {
         throw const AccountException(
             'The signed-in account changed. Please retry.');
@@ -225,23 +286,6 @@ class FirebaseAuthRepository
           .doc('profiles/$uid')
           .get(const GetOptions(source: Source.server));
       return userFromProfile(uid, snapshot.data()!);
-    } catch (error) {
-      throw accountFailure(error);
-    }
-  }
-
-  @override
-  Future<String> getPrivateInvitationCode() async {
-    try {
-      final result = await functions
-          .httpsCallable('getPrivateInvitationCode')
-          .call<Map<String, dynamic>>();
-      final code = result.data['code'];
-      if (code is! String || !RegExp(r'^[A-Z0-9]{5}$').hasMatch(code)) {
-        throw const AccountException(
-            'Private invitation code unavailable. Retry later.');
-      }
-      return code;
     } catch (error) {
       throw accountFailure(error);
     }

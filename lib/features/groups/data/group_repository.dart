@@ -15,10 +15,10 @@ abstract class GroupRepository {
   /// Legacy entry point; Firebase creation uses GroupCreationRepository with an explicit position.
   Future<void> createGroup(String name, String churchName);
 
-  /// Reserved for invitation joining; unavailable in the Firebase foundation.
+  /// Legacy boundary; production joining uses UID-addressed invitation acceptance.
   Future<void> joinGroup(String inviteCode);
 
-  /// Legacy development control; trusted membership management is deferred.
+  /// Update a role with the same backend authorization as member management.
   Future<void> updateMemberRole({
     required String groupId,
     required String userId,
@@ -26,7 +26,7 @@ abstract class GroupRepository {
   });
 }
 
-/// Creation is an idempotent trusted operation, not an arbitrary membership write.
+/// Creation atomically bootstraps a new group and its creator membership.
 abstract interface class GroupCreationRepository {
   Future<String> createGroupWithPosition(
       {required String name,

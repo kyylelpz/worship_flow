@@ -9,15 +9,15 @@ import '../data/mock_group_repository.dart';
 import '../data/firestore_group_repository.dart';
 import '../../../core/firebase/firebase_providers.dart';
 
-/// Swap to FirestoreGroupRepository in Phase 2 — no other file changes.
+/// Firebase-backed group reads/writes; mocks are explicit development overrides.
 final groupRepositoryProvider = Provider<GroupRepository>((ref) {
   if (ref.watch(useMockBackendProvider)) {
     final repo = MockGroupRepository();
     ref.onDispose(repo.dispose);
     return repo;
   }
-  return FirestoreGroupRepository(ref.watch(firestoreProvider),
-      ref.watch(firebaseFunctionsProvider), ref.watch(firebaseAuthProvider));
+  return FirestoreGroupRepository(
+      ref.watch(firestoreProvider), ref.watch(firebaseAuthProvider));
 });
 
 /// All groups the current user belongs to.

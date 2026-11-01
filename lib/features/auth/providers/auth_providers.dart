@@ -13,8 +13,8 @@ import '../data/mock_auth_repository.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   if (ref.watch(useMockBackendProvider)) return MockAuthRepository();
-  return FirebaseAuthRepository(ref.watch(firebaseAuthProvider),
-      ref.watch(firestoreProvider), ref.watch(firebaseFunctionsProvider));
+  return FirebaseAuthRepository(
+      ref.watch(firebaseAuthProvider), ref.watch(firestoreProvider));
 });
 
 class AuthController extends StateNotifier<SessionState> {

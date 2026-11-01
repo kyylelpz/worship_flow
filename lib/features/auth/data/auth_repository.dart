@@ -19,10 +19,9 @@ abstract interface class PersistentAuthRepository {
   Stream<AppUser?> watchUser();
 }
 
-/// Trusted backend boundary; private codes never belong to AppUser/public data.
+/// Profile writes are validated by Firestore Security Rules.
 abstract interface class AccountProfileRepository {
   Future<AppUser> completeProfile(String firstName, String lastName);
-  Future<String> getPrivateInvitationCode();
 }
 
 class SignInCancelled implements Exception {

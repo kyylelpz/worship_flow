@@ -157,3 +157,5 @@ skills-lock.json
 functions/node_modules/
 .firebase/
 ui-debug.log
+
+firestore_tests/node_modules/

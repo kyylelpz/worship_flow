@@ -1,52 +1,205 @@
 rules_version = '2';
-
-// Foundation schema (all writes are validated by trusted callable functions):
-// profiles/{uid}: firstName/lastName strings <=80, verified email <=320,
-//   profileComplete bool, createdAt/updatedAt timestamps, completedAt timestamp|null.
-// profiles/{uid}/memberships/{groupId}: uid/groupId strings, createdAt/updatedAt.
-// groups/{groupId}: name<=120, churchName<=160, createdBy UID (immutable),
-//   memberCount int, accentColorValue int, createdAt/updatedAt timestamps.
-// groups/{groupId}/members/{uid}: immutable uid/groupId, firstName/lastName<=80,
-//   role administrator|worshipLeader|worshipTrainee; position independent enum,
-//   customPosition<=80 (only for other), createdAt/updatedAt timestamps.
-// accountPrivate/{uid}, invitationCodeReservations/{code}, foundationLimits/**
-//   and groupCreationRequests: server-only. No client can read codes directly.
-// No client writes are permitted; callable validators, transactions and quotas
-// are the only creation/update mechanism. Song/setlist persistence is deferred.
+// Spark schema: private profiles; opt-in emailDirectory/{lowercaseEmail}: uid only;
+// directoryAccess/{uid}: groupId proving current admin authority (never a role).
+// groups: immutable name/churchName/createdBy/memberCount/accentColorValue/createdAt;
+// administratorUid is a witness to an actual surviving Administrator, not authority.
+// members: uid/groupId/name snapshots, role, independent position, timestamps.
+// owner memberships: uid/groupId/createdAt/updatedAt, atomically mirrors member.
+// profiles/{recipient}/invitations/{group}: immutable assignment/groupName/inviterUid,
+// notificationId, createdAt; status pending|accepted|declined, updatedAt.
+// profiles/{inviter}/notifications/{id}: recipientUid/groupId/groupName/createdAt/readAt.
+// Legacy codes, server quotas, Song/Setlist paths remain denied. No Functions required.
 service cloud.firestore {
-  match /databases/{database}/documents {
-    function isAuthenticated() { return request.auth != null; }
-    function isVerifiedGoogle() {
-      return isAuthenticated() && request.auth.token.email_verified == true
-          && request.auth.token.firebase.sign_in_provider == 'google.com';
-    }
-    function isOwner(uid) { return isVerifiedGoogle() && request.auth.uid == uid; }
-    function hasCompletedProfile() {
-      return isVerifiedGoogle()
-          && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-          && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.profileComplete == true;
-    }
-    function isMember(groupId) {
-      return hasCompletedProfile()
-          && exists(/databases/$(database)/documents/groups/$(groupId))
-          && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
-    }
-    match /profiles/{uid} {
-      allow get: if isOwner(uid);
-      allow list, create, update, delete: if false;
-      match /memberships/{groupId} {
-        allow get, list: if isOwner(uid) && hasCompletedProfile();
-        allow create, update, delete: if false;
-      }
-    }
-    match /groups/{groupId} {
-      allow get: if isMember(groupId);
-      allow list, create, update, delete: if false;
-      match /members/{uid} {
-        allow get, list: if isMember(groupId);
-        allow create, update, delete: if false;
-      }
-    }
-    match /{document=**} { allow read, write: if false; }
+ match /databases/{database}/documents {
+  function google() {
+   return request.auth != null && request.auth.token.email_verified == true
+    && request.auth.token.firebase.sign_in_provider == 'google.com';
   }
+  function owner(uid) { return google() && request.auth.uid == uid; }
+  function profile(uid) { return get(/databases/$(database)/documents/profiles/$(uid)).data; }
+  function complete() { return google() && profile(request.auth.uid).profileComplete == true; }
+  function memberPath(g,u) { return /databases/$(database)/documents/groups/$(g)/members/$(u); }
+  function groupPath(g) { return /databases/$(database)/documents/groups/$(g); }
+  function indexPath(g,u) { return /databases/$(database)/documents/profiles/$(u)/memberships/$(g); }
+  function invitationPath(g,u) { return /databases/$(database)/documents/profiles/$(u)/invitations/$(g); }
+  function admin(g,u) { return exists(groupPath(g)) && get(memberPath(g,u)).data.role == 'administrator'; }
+  function member(g) { return complete() && exists(groupPath(g)) && exists(memberPath(g,request.auth.uid)); }
+  function text(s,n) { return s is string && s.size() > 0 && s.size() <= n && !s.matches('.*[\\x00-\\x1f\\x7f].*'); }
+  function validPosition(d) {
+   return d.position in ['vocalist','acousticGuitar','electricGuitar','bassGuitar','keyboard','drums','other']
+    && d.customPosition is string && (d.position == 'other' ? text(d.customPosition,80) : d.customPosition == '');
+  }
+  function validRole(d) { return d.role in ['administrator','worshipLeader','worshipTrainee']; }
+  function validProfile(d) {
+   return d.keys().hasAll(['firstName','lastName','email','profileComplete','createdAt','updatedAt','completedAt','allowInvitations'])
+    && d.keys().hasOnly(['firstName','lastName','email','profileComplete','createdAt','updatedAt','completedAt','allowInvitations'])
+    && d.firstName is string && d.firstName.size() <= 80 && d.lastName is string && d.lastName.size() <= 80
+    && d.email == request.auth.token.email && text(d.email,320)
+    && d.profileComplete is bool && d.allowInvitations is bool
+    && d.createdAt is timestamp && d.updatedAt == request.time
+    && (d.profileComplete ? text(d.firstName,80) && text(d.lastName,80) && d.completedAt is timestamp : d.completedAt == null && d.allowInvitations == false);
+  }
+  function directoryMatches(uid,d) {
+   let p = getAfter(/databases/$(database)/documents/profiles/$(uid)).data;
+   return p.allowInvitations == true && p.profileComplete == true && d.uid == uid;
+  }
+  function validDirectory(uid,d) {
+   return d.keys().hasAll(['uid']) && d.keys().hasOnly(['uid']) && d.uid == uid;
+  }
+  function validLookupContext(uid,d) {
+   return d.keys().hasAll(['groupId']) && d.keys().hasOnly(['groupId'])
+    && text(d.groupId,128) && admin(d.groupId,uid);
+  }
+  function profileDirectory(d) {
+   let path = /databases/$(database)/documents/emailDirectory/$(d.email.lower());
+   return d.allowInvitations ? getAfter(path).data.uid == request.auth.uid : !existsAfter(path);
+  }
+  function validGroup(d) {
+   return d.keys().hasAll(['name','churchName','createdBy','memberCount','accentColorValue','createdAt','updatedAt','administratorUid'])
+    && d.keys().hasOnly(['name','churchName','createdBy','memberCount','accentColorValue','createdAt','updatedAt','administratorUid'])
+    && text(d.name,120) && text(d.churchName,160) && text(d.createdBy,128)
+    && d.memberCount is int && d.memberCount >= 1 && d.accentColorValue is int
+    && d.createdAt is timestamp && d.updatedAt == request.time && text(d.administratorUid,128);
+  }
+  function survivingAdmin(g) {
+   let d = getAfter(groupPath(g)).data;
+   return getAfter(memberPath(g,d.administratorUid)).data.role == 'administrator';
+  }
+  function validMember(g,u,d) {
+   return d.keys().hasAll(['uid','groupId','firstName','lastName','role','position','customPosition','createdAt','updatedAt'])
+    && d.keys().hasOnly(['uid','groupId','firstName','lastName','role','position','customPosition','createdAt','updatedAt'])
+    && d.uid == u && d.groupId == g && text(d.firstName,80) && text(d.lastName,80)
+    && validRole(d) && validPosition(d) && d.createdAt is timestamp && d.updatedAt == request.time;
+  }
+  function mirror(g,u,d) {
+   let i = getAfter(indexPath(g,u)).data;
+   return i.uid == u && i.groupId == g && i.createdAt == d.createdAt;
+  }
+  function accepting(g,u) {
+   let before = get(invitationPath(g,u)).data;
+   let after = getAfter(invitationPath(g,u)).data;
+   return owner(u) && before.status == 'pending' && after.status == 'accepted'
+    && after.updatedAt == request.time && admin(g,before.inviterUid);
+  }
+  function assigned(g,u,d) {
+   let i = get(invitationPath(g,u)).data;
+   return accepting(g,u) && d.role == i.role && d.position == i.position && d.customPosition == i.customPosition;
+  }
+  function creator(g,u,d) {
+   let group = getAfter(groupPath(g)).data;
+   return owner(u) && !exists(groupPath(g)) && group.createdBy == u
+    && group.administratorUid == u && d.role == 'administrator';
+  }
+  function validInvitation(g,u,d) {
+   return d.keys().hasAll(['groupId','recipientUid','groupName','inviterUid','role','position','customPosition','notificationId','status','createdAt','updatedAt'])
+    && d.keys().hasOnly(['groupId','recipientUid','groupName','inviterUid','role','position','customPosition','notificationId','status','createdAt','updatedAt'])
+    && d.groupId == g && d.recipientUid == u && text(d.groupName,120) && text(d.inviterUid,128)
+    && validRole(d) && validPosition(d) && d.notificationId is string && d.notificationId.matches('^[A-Za-z0-9]{20}$')
+    && d.status in ['pending','accepted','declined'] && d.createdAt is timestamp && d.updatedAt == request.time;
+  }
+  function invite(g,u,d) {
+   return complete() && admin(g,request.auth.uid) && u != request.auth.uid
+    && profile(u).profileComplete == true && profile(u).allowInvitations == true
+    && !exists(memberPath(g,u)) && d.status == 'pending' && d.createdAt == request.time
+    && d.inviterUid == request.auth.uid && d.groupName == get(groupPath(g)).data.name;
+  }
+  function acceptedNotification(d) {
+   let n = getAfter(/databases/$(database)/documents/profiles/$(d.inviterUid)/notifications/$(d.notificationId)).data;
+   return n.groupId == d.groupId && n.recipientUid == d.recipientUid && n.groupName == d.groupName && n.createdAt == request.time;
+  }
+  match /profiles/{uid} {
+   allow get: if owner(uid);
+   allow create: if owner(uid) && validProfile(request.resource.data)
+    && request.resource.data.createdAt == request.time
+    && (request.resource.data.profileComplete ? request.resource.data.completedAt == request.time : request.resource.data.completedAt == null)
+    && profileDirectory(request.resource.data);
+   allow update: if owner(uid) && validProfile(request.resource.data)
+    && request.resource.data.createdAt == resource.data.createdAt
+    && (!resource.data.profileComplete || request.resource.data.profileComplete)
+    && (resource.data.profileComplete ? request.resource.data.completedAt == resource.data.completedAt
+      : request.resource.data.completedAt == null || request.resource.data.completedAt == request.time)
+    && profileDirectory(request.resource.data);
+   match /memberships/{g} {
+    allow read: if owner(uid) && complete();
+    allow create: if complete() && (owner(uid) || admin(g,request.auth.uid)) && validIndex(g,uid,request.resource.data);
+    allow update: if false;
+    allow delete: if complete() && admin(g,request.auth.uid) && !existsAfter(memberPath(g,uid));
+   }
+   match /invitations/{g} {
+    allow get: if owner(uid) && complete() || complete() && admin(g,request.auth.uid);
+    allow list: if owner(uid) && complete();
+    allow create: if validInvitation(g,uid,request.resource.data) && invite(g,uid,request.resource.data);
+    allow update: if validInvitation(g,uid,request.resource.data) && (
+     resource.data.status != 'pending' && invite(g,uid,request.resource.data)
+     || owner(uid) && complete() && resource.data.status == 'pending'
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+      && (request.resource.data.status == 'declined' && !existsAfter(memberPath(g,uid))
+       || request.resource.data.status == 'accepted' && accepting(g,uid)
+        && existsAfter(memberPath(g,uid)) && acceptedNotification(request.resource.data)));
+   }
+   match /notifications/{id} {
+    allow read: if owner(uid) && complete();
+    allow create: if complete() && validNotification(request.resource.data)
+     && request.resource.data.recipientUid == request.auth.uid
+     && notificationAcceptance(uid,id,request.resource.data);
+    allow update: if owner(uid) && validNotification(request.resource.data)
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']) && request.resource.data.readAt == request.time;
+   }
+  }
+  function validIndex(g,u,d) {
+   let m = getAfter(memberPath(g,u)).data;
+   return d.keys().hasAll(['uid','groupId','createdAt','updatedAt']) && d.keys().hasOnly(['uid','groupId','createdAt','updatedAt'])
+    && d.uid == u && d.groupId == g && d.createdAt == request.time && d.updatedAt == request.time
+    && m.uid == u && m.groupId == g && m.createdAt == d.createdAt;
+  }
+  function validNotification(d) {
+   return d.keys().hasAll(['recipientUid','groupId','groupName','createdAt','readAt'])
+    && d.keys().hasOnly(['recipientUid','groupId','groupName','createdAt','readAt'])
+    && text(d.recipientUid,128) && text(d.groupId,128) && text(d.groupName,120)
+    && d.createdAt is timestamp && (d.readAt == null || d.readAt is timestamp);
+  }
+  function notificationAcceptance(uid,id,d) {
+   let i = getAfter(invitationPath(d.groupId,d.recipientUid)).data;
+   return accepting(d.groupId,d.recipientUid) && i.inviterUid == uid && i.notificationId == id
+    && i.groupName == d.groupName && d.createdAt == request.time && d.readAt == null;
+  }
+  match /groups/{g} {
+   allow get: if member(g);
+   allow create: if complete() && validGroup(request.resource.data)
+    && request.resource.data.createdBy == request.auth.uid && request.resource.data.administratorUid == request.auth.uid
+    && request.resource.data.createdAt == request.time && request.resource.data.memberCount == 1
+    && getAfter(memberPath(g,request.auth.uid)).data.role == 'administrator';
+   allow update: if complete() && admin(g,request.auth.uid) && validGroup(request.resource.data)
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['administratorUid','updatedAt']) && survivingAdmin(g);
+   match /members/{uid} {
+    allow read: if member(g);
+    allow create: if complete() && validMember(g,uid,request.resource.data)
+     && (creator(g,uid,request.resource.data) || assigned(g,uid,request.resource.data))
+     && request.resource.data.firstName == profile(uid).firstName && request.resource.data.lastName == profile(uid).lastName
+     && request.resource.data.createdAt == request.time && mirror(g,uid,request.resource.data) && survivingAdmin(g);
+    allow update: if complete() && admin(g,request.auth.uid) && validMember(g,uid,request.resource.data)
+     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','position','customPosition','updatedAt'])
+     && (uid != request.auth.uid || request.resource.data.role == resource.data.role || request.resource.data.role != 'administrator')
+     && survivingAdmin(g);
+    allow delete: if complete() && admin(g,request.auth.uid) && !existsAfter(indexPath(g,uid)) && survivingAdmin(g);
+   }
+  }
+  match /directoryAccess/{uid} {
+   allow get: if owner(uid);
+   allow create, update: if owner(uid) && complete() && validLookupContext(uid,request.resource.data);
+  }
+  match /emailDirectory/{email} {
+   // Exact lookup only; even an admin cannot list/query the directory.
+   allow get: if complete() && (email == request.auth.token.email.lower()
+    || admin(get(/databases/$(database)/documents/directoryAccess/$(request.auth.uid)).data.groupId,request.auth.uid))
+    && (!exists(/databases/$(database)/documents/emailDirectory/$(email))
+     || profile(resource.data.uid).allowInvitations == true && profile(resource.data.uid).email.lower() == email);
+   allow create, update: if google() && email == request.auth.token.email.lower()
+    && validDirectory(request.auth.uid,request.resource.data)
+    && directoryMatches(request.auth.uid,request.resource.data);
+   allow delete: if google() && email == request.auth.token.email.lower()
+    && resource.data.uid == request.auth.uid && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.allowInvitations == false;
+  }
+  match /{document=**} { allow read, write: if false; }
+ }
 }

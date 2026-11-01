@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../core/router/route_paths.dart';
+import '../../profile/widgets/invitation_panel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/user_role.dart';
@@ -23,6 +26,10 @@ class GroupSelectionScreen extends ConsumerWidget {
         title: const Text('Choose a Group'),
         actions: [
           IconButton(
+              tooltip: 'Profile and invitations',
+              icon: const Icon(Icons.person_outline),
+              onPressed: () => context.push(RoutePaths.profile)),
+          IconButton(
             tooltip: 'Sign out',
             icon: const Icon(Icons.logout_rounded),
             onPressed: () => ref.read(sessionProvider.notifier).signOut(),
@@ -46,6 +53,7 @@ class GroupSelectionScreen extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
               children: [
+                const InvitationPanel(),
                 Text(
                   'Welcome, ${session.user?.firstName ?? 'Friend'}',
                   style: theme.textTheme.headlineSmall,
@@ -179,7 +187,7 @@ class _JoinOrCreateCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Create a worship team. Invitation-based joining is coming in the next phase.',
+              'Create a worship team, or accept an invitation above.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
@@ -205,6 +213,7 @@ class _EmptyGroupsState extends StatelessWidget {
       Text(
           'You have no worship groups yet. Create your first group to continue.'),
       SizedBox(height: 20),
+      InvitationPanel(),
       _JoinOrCreateCard(),
     ]);
   }

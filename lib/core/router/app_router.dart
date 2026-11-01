@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import '../firebase/firebase_providers.dart';
 import '../../features/profile/screens/profile_completion_screen.dart';
 import 'package:go_router/go_router.dart';
 
@@ -69,12 +68,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == RoutePaths.sessionLoading) {
         return session.hasGroup ? RoutePaths.setlists : RoutePaths.groups;
       }
-      if (!ref.read(useMockBackendProvider) &&
-          loc.startsWith('/groups/') &&
-          loc.endsWith('/members')) {
-        return RoutePaths.groups;
-      }
-      if (!session.hasGroup && !choosingGroup) {
+      if (!session.hasGroup && !choosingGroup && loc != RoutePaths.profile) {
         return RoutePaths.groups;
       }
 

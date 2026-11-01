@@ -6,7 +6,7 @@ import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../groups/providers/group_providers.dart';
-import '../widgets/private_invitation_code.dart';
+import '../widgets/invitation_panel.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -78,7 +78,8 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           const _SectionHeader(title: 'Account'),
-          PrivateInvitationCode(key: ValueKey(user?.id)),
+          const InvitationPrivacyToggle(),
+          const InvitationPanel(),
           Card(
             child: Column(
               children: [
@@ -99,6 +100,13 @@ class ProfileScreen extends ConsumerWidget {
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),
+                if (groupId != null)
+                  ListTile(
+                      leading: const Icon(Icons.people_outline),
+                      title: const Text('Members'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          context.push(RoutePaths.groupMembersFor(groupId))),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.piano_rounded),

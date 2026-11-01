@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../groups/providers/group_providers.dart';
 import '../providers/setlist_providers.dart';
+import '../../groups/providers/invitation_providers.dart';
 import '../widgets/setlist_card.dart';
 import '../widgets/setlist_filter_bar.dart';
 import '../widgets/upcoming_service_card.dart';
@@ -27,13 +29,28 @@ class SetlistsScreen extends ConsumerWidget {
 
     Future<void> openCreate() async {
       if (group == null) return;
+
       final now = DateTime.now();
-      final suggestedDate = DateTime(now.year, now.month, now.day + 7, 9, 30);
+      var daysUntilSunday = (DateTime.sunday - now.weekday) % 7;
+      final todaySlot = DateTime(now.year, now.month, now.day, 8, 30);
+      if (daysUntilSunday == 0 && !now.isBefore(todaySlot)) {
+        daysUntilSunday = 7;
+      }
+      final sunday = DateTime(
+        now.year,
+        now.month,
+        now.day + daysUntilSunday,
+        8,
+        30,
+      );
+
+      final name = '${DateFormat('MMM d').format(sunday)} Sunday Service';
+
       final id = await ref.read(setlistRepositoryProvider).createDraft(
-            groupId: group.id,
-            name: 'New Setlist',
-            serviceDateTime: suggestedDate,
-          );
+        groupId: group.id,
+        name: name,
+        serviceDateTime: sunday,
+      );
       if (context.mounted) {
         unawaited(context.push(RoutePaths.setlistEditorFor(id)));
       }
@@ -60,7 +77,19 @@ class SetlistsScreen extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Profile',
-            icon: const Icon(Icons.person_rounded),
+            icon: Badge(
+                isLabelVisible: (ref
+                                .watch(pendingInvitationsProvider)
+                                .valueOrNull
+                                ?.length ??
+                            0) +
+                        (ref
+                                .watch(membershipNotificationsProvider)
+                                .valueOrNull
+                                ?.length ??
+                            0) >
+                    0,
+                child: const Icon(Icons.person_rounded)),
             onPressed: () => context.push(RoutePaths.profile),
           ),
         ],
@@ -83,11 +112,12 @@ class SetlistsScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
           children: [
-            if (filter == SetlistFilter.upcoming) ...[
-              const UpcomingServiceCard(),
-              const SizedBox(height: 16),
-            ],
             const SetlistFilterBar(),
+            if (filter == SetlistFilter.upcoming &&
+                ref.watch(nextUpcomingSetlistProvider) != null) ...[
+              const SizedBox(height: 16),
+              const UpcomingServiceCard(),
+            ],
             const SizedBox(height: 16),
             asyncSetlists.when(
               loading: () => const Padding(
@@ -99,15 +129,28 @@ class SetlistsScreen extends ConsumerWidget {
                 child: Text('Could not load setlists: $e'),
               ),
               data: (setlists) {
+                final hasNextUpcoming = filter == SetlistFilter.upcoming &&
+                    ref.watch(nextUpcomingSetlistProvider) != null;
+
                 if (setlists.isEmpty) {
+                  // If the only upcoming service is the one shown in the UP NEXT card,
+                  // don't claim there are no upcoming services.
+                  if (hasNextUpcoming && filter == SetlistFilter.upcoming) {
+                    return const SizedBox.shrink();
+                  }
                   return _EmptyState(
                     filter: filter,
                     canEdit: canEdit,
                     onCreate: canEdit ? openCreate : null,
                   );
                 }
+
                 return Column(
                   children: [
+                    if (filter == SetlistFilter.upcoming && hasNextUpcoming) ...[
+                      // optional section header: "Later services"
+                      const SizedBox(height: 4),
+                    ],
                     for (final s in setlists) ...[
                       SetlistCard(setlist: s),
                       const SizedBox(height: 12),

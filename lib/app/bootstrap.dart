@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 
 import '../firebase_options.dart';
 import '../core/firebase/firebase_providers.dart';
@@ -27,8 +26,6 @@ Future<void> bootstrap(Widget Function() builder) async {
                 : '127.0.0.1';
         await FirebaseAuth.instance.useAuthEmulator(host, 9099);
         FirebaseFirestore.instance.useFirestoreEmulator(host, 8080);
-        FirebaseFunctions.instanceFor(region: 'asia-east2')
-            .useFunctionsEmulator(host, 5001);
       }
     }
     runApp(builder());

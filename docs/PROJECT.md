@@ -2,11 +2,11 @@
 
 ## Overview
 
-**Every Note for His Glory**. A Flutter worship-team planning app with a Firebase Authentication/profile/group foundation and completed in-memory Song/Arrangement/Setlist, ChordPro editing and Rehearsal features. Firebase services require the Console/deployment setup below; this checkout does not deploy them automatically.
+**Every Note for His Glory**. A Flutter worship-team planning app with a Firebase Authentication/profile/group and email-invitation foundation and completed in-memory Song/Arrangement/Setlist, ChordPro editing and Rehearsal features. Firebase services require the Console/deployment setup below; this checkout does not deploy them automatically.
 
 ## Tech stack
 
-`pubspec.yaml`: app version `0.1.0`, unpublished; Dart `>=3.4.0 <4.0.0`, Flutter `>=3.22.0`. Dependencies: Flutter SDK, `firebase_core: ^5.1.0`, `firebase_auth: ^7.0.1`, `cloud_firestore: ^7.1.0`, `cloud_functions: ^7.0.1`, `google_sign_in: ^7.2.0`, `flutter_riverpod: ^2.5.1`, `go_router: ^14.2.0`, `google_fonts: ^6.2.1`, `intl: ^0.19.0`, `uuid: ^4.4.0`. Development: Flutter test SDK and `flutter_lints: ^4.0.0`. These are declared constraints, not resolved versions.
+`pubspec.yaml`: app version `0.1.0`, unpublished; Dart `>=3.4.0 <4.0.0`, Flutter `>=3.22.0`. Dependencies: Flutter SDK, `firebase_core: ^5.1.0`, `firebase_auth: ^7.0.1`, `cloud_firestore: ^7.1.0`, `google_sign_in: ^7.2.0`, `flutter_riverpod: ^2.5.1`, `go_router: ^14.2.0`, `google_fonts: ^6.2.1`, `intl: ^0.19.0`, `uuid: ^4.4.0`. Development: Flutter test SDK and `flutter_lints: ^4.0.0`. These are declared constraints, not resolved versions.
 
 Analyzer fixes were verified with Flutter **3.44.6 / Dart 3.12.2**. Current radio/reorder APIs require a newer Flutter than the declared minimum; the minimum was not changed. Themes use Material widgets and Inter typography through Google Fonts.
 
@@ -15,17 +15,17 @@ Analyzer fixes were verified with Flutter **3.44.6 / Dart 3.12.2**. Current radi
 - `lib/app/`: existing Firebase options initialization, debug-only emulator/mock configuration, startup-failure UI and themed router app; `main.dart` installs Riverpod ProviderScope.
 - `lib/core/`: immutable-style models, mock fixtures, routing, colors, typography, and theme state. Shared widget files are whitespace-only placeholders.
 - `lib/features/auth/`: Google Sign-In (Android/iOS/macOS and Web popup), persistent Firebase auth/profile restoration, cancellation/network errors, profile completion and sign-out. Firebase SDK access stays in repositories.
-- `groups/`: own-membership group streams, selection and trusted group creation with independent position selection. Creator becomes Administrator atomically. Invitations and production member management are unavailable; legacy mock controls remain debug-only.
+- `groups/`: own-membership group streams, selection, atomic group creation, opt-in email invitations and Administrator-only role/position/removal management. Creator becomes Administrator atomically. Roles and positions remain independent.
 - `setlists/`: group lists, upcoming/previous/draft filters, next-service card, details, creation, duplication, deletion, metadata editing, song selection/reordering/removal, arrangement/key selection, draft saving and publishing in memory.
 - `songs/`: reactive group-scoped CRUD, search/category filters and read-only details with no actions (favorite toggle removed). Songs own title, artist, category, favorite and shared Vocal Key Presets. Arrangements own name, BPM, meter, optional reference URL and canonical source; the source is read-only in the arrangement form and edited through the full-screen highlighted ChordPro editor. Referenced deletion is blocked.
-- `profile/`: required profile completion, masked owner-only private code and account/group display, group switching, sign-out, chart preferences and theme selection. Preferences are in memory; the shared rehearsal renderer consumes lyric/chord/header font sizes, global scale, line spacing, chart width, display mode and Standard/Nashville notation.
+- `profile/`: required profile completion, Allow Invitations preference, invitation requests/acceptance notifications and account/group display, group switching, sign-out, chart preferences and theme selection. Preferences are in memory; the shared rehearsal renderer consumes lyric/chord/header font sizes, global scale, line spacing, chart width, display mode and Standard/Nashville notation.
 - `charts/`: pure Dart ChordPro parser, typed chart/chord models, transposition and display projections, explicit optional timing grids and a shared Flutter renderer with fixed right-side floating parsed-section bubbles. The old source adapter/viewer remains available for compatibility. `rehearsal/`: actual setlist player screen with a song drawer and horizontal song switching.
 
 ## State and data flow
 
-Feature repositories use Riverpod injection. Auth/group default to FirebaseAuthRepository and FirestoreGroupRepository; Song/Setlist repositories remain in memory until Phase 3C. AuthRepository retains sign-in/out/current-user APIs with separate persistent-auth and trusted-profile capabilities. AuthController owns restoration/loading/errors, current profile and selected group. Firebase auth persists natively and uses local persistence on Web. Group selection remains session-local. Sign-out clears it.
+Feature repositories use Riverpod injection. Auth/group default to FirebaseAuthRepository and FirestoreGroupRepository; Song/Setlist repositories remain in memory until Phase 3C. AuthRepository retains sign-in/out/current-user APIs with separate persistent-auth and rule-validated profile capabilities. AuthController owns restoration/loading/errors, current profile and selected group. Firebase auth persists natively and uses local persistence on Web. Group selection remains session-local. Sign-out clears it.
 
-GroupRepository retains its read APIs; GroupCreationRepository adds position/request-ID creation. Production watchGroups is scoped to the current user, not a global directory. It listens to the owner membership index and authorized group/member snapshots, ignoring cached-only snapshots. Permission lookups use server reads. Current role derives from the selected membership, never a profile/global auth role. Revocation/errors clear the selection. Join/member-role mutations fail closed in Firebase mode.
+GroupRepository retains its read APIs; GroupCreationRepository adds position/request-ID creation. Production watchGroups is scoped to the current user, not a global directory. It listens to the owner membership index and authorized group/member snapshots, ignoring cached-only snapshots. Permission lookups use server reads. Current role derives from the selected membership, never a profile/global auth role. Revocation/errors clear the selection. Membership changes are rule-validated transactions; the legacy joinGroup boundary does not accept codes. InvitationRepository owns invitation/privacy/member operations.
 
 Setlist filter state derives sorted lists from the selected group's stream. Upcoming/previous include published setlists; drafts include drafts and published setlists with draft changes. Published rehearsal uses `publishedItems`; the editor loads `draftItems ?? publishedItems`. Rehearsal previews draft-only items for roles with `canManageSetlists`; other roles see an unpublished-state message. Publishing copies draft items into published items and clears the draft. Metadata updates apply immediately rather than having a separate draft copy.
 
@@ -35,15 +35,15 @@ Routing reads the auth session and membership providers: restoration shows /sess
 
 ## Navigation
 
-Initial route is /login with restoration/profile/group gates above. Song routes retain repository authorization and Setlist editing retains role guards. Production access to the legacy Members route redirects to Group Selection.
+Initial route is /login with restoration/profile/group gates above. Song routes retain repository authorization and Setlist editing retains role guards. Members is accessible from Profile for the current group. Non-Administrators can view members but cannot open functional management forms. Profile is also accessible without a selected group.
 
 | Route | Destination |
 | --- | --- |
 | `/session-loading` | Firebase authentication restoration |
-| `/profile/complete` | Required profile completion and masked private code |
+| `/profile/complete` | Required profile completion |
 | `/login` | Login |
 | `/groups` | Group selection |
-| `/groups/:groupId/members` | Legacy mock Members screen; inaccessible in Firebase mode |
+| `/groups/:groupId/members` | Group member list, Administrator invitation/edit/removal actions |
 | `/setlists` | Setlist list |
 | `/setlists/:setlistId/edit` | Setlist editor |
 | `/setlists/:setlistId/rehearse` | Rehearsal: first song, continuous chord chart, song drawer |
@@ -73,68 +73,71 @@ Permission getters retain Administrator, Worship Leader and Trainee behavior. Fi
 
 DEV role switching and legacy session/profile injection only work with explicit development mocks. Firebase mode hides the FAB and rejects these methods. WF_USE_MOCKS=true is honored only outside release builds and skips Firebase initialization. Tests opt into mocks explicitly instead of falling back when Firebase is unconfigured.
 
-## Firebase foundation — backend Phase 3A
+## Firebase foundation — Spark Phase 3B
 
-Existing project: `worship-flow-f3166`. The configured `(default)` database was confirmed as **Standard**, Native mode, `asia-east2`. Callables use `asia-east2` and Node 22. Production defaults never fall back to mock auth/groups. Firebase client persistence for Firestore is disabled; auth persistence remains enabled. Initial auth/profile failures are retryable. Restored accounts select a group again; selected group is not persisted.
+Existing project `worship-flow-f3166`, Standard Native `(default)` database in `asia-east2` (free-tier eligibility confirmed). Google Firebase Authentication and Firestore are the only runtime backend services. Cloud Functions, its Flutter dependency, callable implementations and invitation-code UI were removed. No paid service, external email delivery or invitation codes are required. Production never falls back to mocks.
 
-### Schema and trusted operations
+### Schema and authorization
 
 | Path | Data / access |
 | --- | --- |
-| `profiles/{uid}` | First/last names (max 80), verified Google email (max 320), `profileComplete`, `createdAt`, `updatedAt`, nullable `completedAt`. Owner-only get; no client list/write. No invitation code or global role. |
-| `accountPrivate/{uid}` | Five-character invitation code and timestamps. Server-only, including owner-denied direct reads. |
-| `invitationCodeReservations/{CODE}` | Server-only UID reservation/timestamp for atomic uniqueness. |
-| `groups/{groupId}` | Name (max 120), church name (max 160), immutable creator UID/creation time, updated time, member count and accent color. Member-only gets; no client list/write. |
-| `groups/{groupId}/members/{uid}` | UID/group ID, role, independent position/custom text, first/last name snapshot (no email/code), created/updated timestamps. Members may read/list; no client mutations. |
-| `profiles/{uid}/memberships/{groupId}` | Owner-only membership index: UID/group ID and timestamps. Roles come from the actual group membership, not this index. |
-| `accountPrivate/{uid}/groupCreationRequests/{requestId}` | Server-only group ID/payload-hash receipt for idempotent creation. |
-| `foundationLimits/{uid_operation}` | Server-only time-window counters. |
+| `profiles/{uid}` | Owner-only document gets; first/last name (max 80), verified Google email, completion flag, `allowInvitations`, creation/update/completion timestamps. No global role or invitation code. Owner writes use strict schema and verified token email. |
+| `emailDirectory/{lowercaseEmail}` | Only `uid`; owner opt-in registration/deletion atomically accompanies profile preference. Exact document lookup, never collection queries/listing. |
+| `directoryAccess/{uid}` | Owner's lookup context `{groupId}`. Rules verify actual current Administrator membership both when writing this context and on each email lookup; this document grants no role. |
+| `groups/{groupId}` | Name (max 120), church (max 160), immutable creator/creation timestamp/accent/legacy `memberCount`; `administratorUid` witness and updated timestamp. Member-only gets, no global list. Counts shown in UI derive from actual member snapshots, not the legacy stored count. |
+| `groups/{groupId}/members/{uid}` | UID/groupId, first/last-name snapshots, role, position/customPosition, creation/update timestamps. Members can read/list. Membership is role authority. |
+| `profiles/{uid}/memberships/{groupId}` | Owner-only index with uid/groupId/timestamps, atomically created/deleted with the actual membership. No client-controlled role index. |
+| `profiles/{recipientUid}/invitations/{groupId}` | Group ID/name snapshot, recipient/inviter UID, role, position/customPosition, random notification ID, `pending`/`accepted`/`declined` status and timestamps. Recipient reads/lists own requests; current group Administrators may get the exact invitation. No email stored here. |
+| `profiles/{inviterUid}/notifications/{notificationId}` | Recipient UID, group ID/name, creation time and nullable `readAt`. Owner reads/listens/dismisses; only atomic invitation acceptance can create one. |
 
-Roles retain `administrator`, `worshipLeader`, `worshipTrainee`. Positions are `vocalist`, `acousticGuitar`, `electricGuitar`, `bassGuitar`, `keyboard`, `drums`, `other`; Other requires custom text (max 80). Position never grants permissions. Legacy `AppUser.instrument`/session role remain for API/development compatibility; production Profile uses the selected membership's position.
+Roles: `administrator`, `worshipLeader`, `worshipTrainee`. Positions: `vocalist`, `acousticGuitar`, `electricGuitar`, `bassGuitar`, `keyboard`, `drums`, `other` (custom text required, max 80). Positions never grant permissions. `AppUser.instrument` and session/global role remain development compatibility fields, not production authority.
 
-All four callables require a Firebase-verified Google identity and verified email:
+Profile completion defaults Allow Invitations to enabled. Existing Phase 3A profiles acquire this field and an opt-in directory entry on their next successful account restoration. Disabling it atomically deletes discovery; rules also deny new invitations to that profile even when an Administrator already knows its UID. Pending requests remain available and can be accepted or declined. Private profile documents never become readable by an inviter.
 
-- `ensureAccount`: initializes a draft profile prefilled from Google display name, plus private code/reservation transactionally. Codes use Node `crypto.randomInt` over A–Z/0–9, collision-check within transactions and retry at most 20 candidates. Repeated/concurrent initialization preserves existing codes and completed profiles.
-- `completeProfile`: accepts only first/last name, validates type/length/control characters, derives UID/email from auth, and writes completion/timestamps. Limited to 20 updates/minute per UID.
-- `getPrivateInvitationCode`: accepts no target UID and returns only the caller's code, limited to 30 reveals/minute. UI starts masked (`•••••`), has no edit control, clears the revealed value on Hide/account switch, and keeps codes out of global profile state/logs.
-- `createGroup`: requires a completed profile, validates name/church/position and generates a new group ID. Group, creator Administrator membership, owner index and request receipt are atomic. Client roles, UIDs or existing group IDs are rejected. Request retries reuse the result only for identical payloads. Limited to 20 groups/day per UID.
+Group creation transaction uses the per-form request ID as the new group ID, creating only a new group, creator Administrator membership and owner index together. Retries return the already-created ID; there is no server quota or payload-hash receipt. No client may directly add arbitrary members to existing groups.
 
-Rules default-deny: public profile enumeration, cross-user email reads, cross-group access, client group creation/self-membership, role escalation and direct code access are denied. **All foundation writes use server validators**; there is no owner/admin write exception. Song/Setlist Firestore paths remain denied until Phase 3C. Exact document gets and direct owner/member collection queries need no composite indexes; private-code field indexing is disabled explicitly.
+An Administrator enters the recipient's registered verified Google email, selects role/position, and sends a pending in-app request. Rules reject self, duplicate pending and existing-member invitations, and validate all assignment/group snapshots. A request can be reissued after decline or after a formerly accepted member is removed. Recipients confirm Accept/Decline in Profile or Group Selection. Accept transaction writes the immutable assigned membership, owner index, accepted status and inviter notification together. Decline writes only declined status. Replays, partial acceptance, altered assignments and forged notifications are denied. Pending acceptance requires the inviter still to be an Administrator; if that authority is revoked, the recipient can decline and request a new invitation from a current Administrator.
 
-App Check is not yet provisioned/enforced. No code verification, regeneration, sending or invitation endpoint is exposed. Future Phase 3B operations must use the trusted private registry and extend its authorization/quotas rather than expose client code lookups. These are prototype rules to review before broader distribution, not an exhaustive security guarantee.
+Profile shows unread acceptance notifications and requests; the Setlists Profile icon displays a badge when either is present. Notifications can be dismissed. An Administrator can edit role/position or confirm removal. The UI keeps one's own role fixed; rules additionally prevent unauthorized self-promotion. Removing membership must delete its index atomically. The group's `administratorUid` is a witness pointing to a real surviving Administrator, not an independent grant of authority. Rules use `getAfter` to require that witness still be an Administrator after membership changes. Removing/demoting the witness requires transferring it to another actual Administrator atomically; concurrent changes cannot eliminate all Administrators. Legacy groups acquire this witness during their first Administrator invitation/management transaction.
 
-### Manual Firebase Console and deployment setup
+### Privacy and operational limitations
 
-1. In the existing project's **Authentication → Sign-in method**, enable **Google** and choose the project support email. Only verified Google accounts are accepted. See [Flutter federated sign-in](https://firebase.google.com/docs/auth/flutter/federated-auth).
-2. **Android:** register debug/release SHA-1 and SHA-256 fingerprints for `com.example.worship_flow`; download the refreshed `google-services.json` into `android/app/`. It must contain a Web OAuth client (`client_type: 3`); the original file had no OAuth client entry. Alternatively pass its public Web client ID as `WF_GOOGLE_SERVER_CLIENT_ID`. Release INTERNET permission is included. See [Google Sign-In Android setup](https://pub.dev/packages/google_sign_in_android).
-3. **iOS/macOS:** download the correct `GoogleService-Info.plist`, register exact bundle IDs, configure the reversed-client-ID URL scheme and Google client ID in Runner, and set up signing/keychain capabilities. Public IDs may be passed as `WF_GOOGLE_CLIENT_ID` / `WF_GOOGLE_SERVER_CLIENT_ID`. macOS outbound-network entitlements are included. Native Windows Google Sign-In is unsupported; use Web. Linux Firebase options are not configured.
-4. **Web:** authorize actual hosting domains and `localhost` in Firebase Auth (hostnames only). Web uses Firebase popup auth without initializing the native Google plugin.
-5. Keep the existing **Standard `(default)` database in `asia-east2`**. Cloud Functions requires its billing/API prerequisites, including Blaze; these were not changed automatically. Use Node 22 and run `npm --prefix functions ci`. Review and deploy the rules/indexes and callable codebase:
+Exact email lookup **is not private email resolution**: an authorized Administrator who guesses an opted-in registered email can learn its UID/registration. Email addresses are document IDs in the opt-in directory. Collection listing/filter queries are denied, and non-Administrators cannot perform other-user lookup, but Firestore rules cannot impose effective per-user lookup/invitation rate limits. No hashing is claimed to prevent guessing. App Check is not provisioned/enforced. Review this privacy tradeoff before broad distribution.
+
+Requests/notifications/memberships persist in Firestore across sign-out, restarts and offline periods. The existing Firestore disk-persistence setting remains disabled; cached in-session snapshots may remain visible, but transactions require connectivity. There is no new offline database, synchronization or queued offline acceptance: reconnect and retry to commit a decision. Selected group and chart preferences remain session-local. No invitation email is sent. Unregistered or opted-out recipients receive no new invitation; the UI gives a generic unavailable-recipient message.
+
+Rules default-deny legacy `accountPrivate`, `invitationCodeReservations`, server quotas and all Song/Setlist Firestore paths. Existing legacy secret documents, if any, are not used or exposed; remove them manually if desired. Current query shapes are own membership-index collection, member collection under an authorized group, own invitations with `status == pending`, and own notifications with `readAt == null`; only single-field indexes are needed. `firestore.indexes.json` therefore has no composite indexes. Document reads used to validate rules count toward Firestore usage; Spark quotas still apply. These are prototype rules requiring review, not an exhaustive security guarantee.
+
+### Manual configuration and deployment
+
+1. Keep the existing Standard database and enable **Google** in Authentication → Sign-in method; choose support email. Register Android debug/release SHA-1/SHA-256 and download refreshed `android/app/google-services.json` with Web OAuth client (`client_type: 3`), or provide its public ID through `WF_GOOGLE_SERVER_CLIENT_ID`. The original config contained zero OAuth clients. See [Flutter Google authentication](https://firebase.google.com/docs/auth/flutter/federated-auth).
+2. For iOS/macOS configure bundle IDs, plist, reversed-client URL scheme, Google IDs/signing/keychain capabilities. `WF_GOOGLE_CLIENT_ID` / `WF_GOOGLE_SERVER_CLIENT_ID` support public client IDs. Web uses Firebase popup auth; authorize actual hostnames and `localhost`. Native Windows Google sign-in is unsupported; use Web. Linux Firebase configuration and Apple builds are unverified.
+3. Review the rules and deploy only Firestore configuration (no Functions deployment or billing upgrade):
 
    ```powershell
-   firebase deploy --project worship-flow-f3166 --only "firestore:rules,firestore:indexes,functions:foundation"
+   firebase deploy --project worship-flow-f3166 --only "firestore:rules,firestore:indexes"
    ```
 
-   The runtime service account needs Firestore access (e.g. Cloud Datastore User). Use platform credentials; do not check in service-account keys. See [Functions setup](https://firebase.google.com/docs/functions/get-started).
-6. After deployment, verify real Google sign-in/cancellation and relaunch persistence, mandatory profile completion, read-only email, masked code, empty-state Create, two groups with independent positions, Administrator assignment and sign-out. **Production deployment and real Google OAuth were not performed by this implementation task.** Emulator identity tests do not verify Console/OAuth signing configuration.
+   If obsolete Phase 3A Functions were previously deployed, disable/delete those endpoints in Firebase Console before using these client-authorized workflows; removing local source does not delete an already-deployed Admin SDK endpoint. Legacy endpoints bypass Firestore rules. No production resources were deployed/deleted automatically.
+4. Manually verify real Google OAuth/persistence, profile completion, opt-in/out, two-account invitations, accept/decline, multiple groups, notification dismissal, role/position changes and last-Administrator protection. Production OAuth and this deployment were not performed by this task. Existing Phase 3A profiles/groups remain readable and are adopted as described above. Names in existing member snapshots are not propagated on later account-name edits.
 
-### Local validation and development
+### Local validation
 
 ```powershell
-# Isolated security, transaction and callable-transport tests.
-firebase emulators:exec --only auth,firestore,functions --project demo-worship-flow "npm --prefix functions test"
+npm --prefix firestore_tests ci
+firebase emulators:exec --only firestore --project demo-worship-flow "npm --prefix firestore_tests test"
 
-# App emulator mode: project ID must match the app's existing Firebase config.
-firebase emulators:start --only auth,firestore,functions --project worship-flow-f3166
+# App emulator project must match the existing Flutter Firebase options.
+firebase emulators:start --only auth,firestore --project worship-flow-f3166
 flutter run --dart-define=WF_FIREBASE_EMULATORS=true
 
-# Explicit development fixtures, without Firebase (non-release builds only).
+# Explicit development fixtures, non-release only.
 flutter run --dart-define=WF_USE_MOCKS=true
 ```
 
-App emulator host defaults to `10.0.2.2` on Android and `127.0.0.1` elsewhere; set `WF_EMULATOR_HOST` for physical devices. Tests refuse to run against non-emulated Firestore. Node tests cover anonymous/unverified/non-Google access, cross-user reads, secrets, role/UID injection, timestamp/type/schema/oversize corruption, orphaned memberships, exact app query shapes, code collisions/concurrency, profile validation, atomic/idempotent creation, quotas and an Auth → callable → Firestore → sign-out emulator flow. Flutter tests cover restoration/profile gates, cancellation/errors, masking, group creation/selection, roles/positions, revocation and account switching.
+Emulator host defaults to Android `10.0.2.2`, otherwise `127.0.0.1`; physical devices can set `WF_EMULATOR_HOST`. Test code refuses non-emulated Firestore. Rules tests cover exact queries, anonymous/unverified/non-Google denial, private profiles/directory listing, atomic profile/group creation, privacy, duplicate/self invitations, acceptance assignment/index/notification consistency, replay/forgery, independent groups, unauthorized role changes, removal, revocation and concurrent last-Administrator protection. Flutter tests cover privacy, request confirmations, notifications, invite validation, independent roles/positions, management gates/revocation and narrow scaled layouts, alongside retained auth/profile/navigation/rehearsal regressions.
 
-No invitation/member-management production UI, Song/Arrangement/Setlist migration, offline database, synchronization, revision history or import/export was added. Legacy Members UI and role simulation are available only with explicit development mocks.
+No member invitation codes, external email service, Functions, Song/Arrangement/Setlist migration, offline synchronization, revision history, import/export or further backend phase is included. Explicit mock mode keeps fixtures; Firebase invitations are not simulated there; the existing development role menu remains available.
 
 ## Mock data
 
@@ -250,15 +253,15 @@ Ordinary inline chord-only passages such as `[1] - - - |: [5/1]  - - - :| %` ret
 
 ## Development roadmap (planned)
 
-Chart/editor and in-memory song/setlist functionality remains intact. This Firebase foundation is backend Phase 3A. Phase 3B invitations/membership management and Phase 3C Song/Arrangement/Setlist migration are deferred. No offline database, synchronization/revision history or import/export was added. Historical UI phase labels are not the backend rollout schedule.
+Chart/editor and in-memory song/setlist functionality remains intact. The Firebase foundation and Spark invitations/member management are backend Phases 3A–3B. Phase 3C Song/Arrangement/Setlist migration is deferred. No offline database, synchronization/revision history or import/export was added. Historical UI phase labels are not the backend rollout schedule.
 
 ## Known limitations
 
-- Only accounts/private codes/groups/memberships use Firebase storage. Songs, arrangements, setlists, preferences and personal offsets remain in memory. Real new groups start with empty local song/setlist catalogs.
-- Selected group is not persisted. Profile editing UI covers first completion; a separate edit-account screen is not implemented. Member display-name snapshots are not propagated on later profile changes. Group role/position updates and invitations are deferred.
+- Only accounts/groups/memberships/email invitations/notifications use Firebase storage. Songs, arrangements, setlists, preferences and personal offsets remain in memory. Real new groups start with empty local song/setlist catalogs.
+- Selected group is not persisted. Profile editing UI covers first completion; a separate edit-account screen is not implemented. Member display-name snapshots are not propagated on later profile changes. Group role/position updates and invitations are implemented with rule-validated client transactions.
 - Live Google OAuth and production deployment require manual setup. Native Windows Google Sign-In is unsupported; use Web on Windows. Linux Firebase options are not configured. Apple platform builds/configuration need Apple tooling and were not verified here.
 - Missing setlists display unavailable states. Draft-only songs remain absent from published Rehearsal. Editing a preset does not silently update already-stored setlist keys or vocalist names; configuration shows unavailable/changed presets and preserves stored values until explicitly replaced.
-- `test/chord_label_test.dart` covers extension typography, root/bass baselines, literal suffixes, scaling/clipping, styled measurement/anchor alignment, transposition/Nashville projection and instrumental/timing-grid consistency. `test/song_repository_test.dart` covers CRUD, validation, permissions, group isolation, canonical text/ID preservation and published/draft reference safety. `test/song_management_test.dart` covers the forms, source-editor draft navigation, route/membership guards, filtering, setlist selection, reactive Rehearsal resolution and failed-publish handling. `test/anchored_lyric_line_test.dart` covers minimal spacing, adjacent/mid-word/slash chords, word/grapheme wrapping, typography/width changes, transposition and unchanged canonical anchors. `test/floating_sections_test.dart` covers immediate jumps, repeated occurrence identity, scroll highlighting, fixed overlay positioning, state-preserving visibility, safe areas and independent scrolling on narrow/scaled and landscape-sized layouts. `test/chord_chart_view_test.dart` covers anchor alignment/collision lanes, wrapping, narrow/scaled layouts, three modes, transformations, timing rendering, repeated-section navigation and personal controls. `test/timing_grid_test.dart` covers meters/subdivisions, association, changes/sustains, markers, mismatches, validation and grid transformations. `test/chordpro_engine_test.dart` covers parsing, exact anchors, metadata/directives, grids, malformed input, transposition/spelling, Nashville, display modes and every mock arrangement/setlist item. `test/rehearsal_test.dart` covers direct card navigation, first-song order, drawer/swipe selection, scroll reset, section navigation, draft permissions, editor reuse, management deletion refresh, empty/missing setlists and missing arrangements. Firebase foundation widget tests cover restoration/profile/code/group/role flows. Backend emulator tests cover actual callable transport, trusted transactions and security rules; real native Google OAuth remains a manual check. The declared Flutter lower bound does not guarantee compatibility with current API usage.
+- `test/chord_label_test.dart` covers extension typography, root/bass baselines, literal suffixes, scaling/clipping, styled measurement/anchor alignment, transposition/Nashville projection and instrumental/timing-grid consistency. `test/song_repository_test.dart` covers CRUD, validation, permissions, group isolation, canonical text/ID preservation and published/draft reference safety. `test/song_management_test.dart` covers the forms, source-editor draft navigation, route/membership guards, filtering, setlist selection, reactive Rehearsal resolution and failed-publish handling. `test/anchored_lyric_line_test.dart` covers minimal spacing, adjacent/mid-word/slash chords, word/grapheme wrapping, typography/width changes, transposition and unchanged canonical anchors. `test/floating_sections_test.dart` covers immediate jumps, repeated occurrence identity, scroll highlighting, fixed overlay positioning, state-preserving visibility, safe areas and independent scrolling on narrow/scaled and landscape-sized layouts. `test/chord_chart_view_test.dart` covers anchor alignment/collision lanes, wrapping, narrow/scaled layouts, three modes, transformations, timing rendering, repeated-section navigation and personal controls. `test/timing_grid_test.dart` covers meters/subdivisions, association, changes/sustains, markers, mismatches, validation and grid transformations. `test/chordpro_engine_test.dart` covers parsing, exact anchors, metadata/directives, grids, malformed input, transposition/spelling, Nashville, display modes and every mock arrangement/setlist item. `test/rehearsal_test.dart` covers direct card navigation, first-song order, drawer/swipe selection, scroll reset, section navigation, draft permissions, editor reuse, management deletion refresh, empty/missing setlists and missing arrangements. Firebase foundation/invitation widget tests cover restoration/profile/group/role/privacy/member flows. Firestore emulator tests cover client transactions, atomic invariants and security rules; real native Google OAuth remains a manual check. The declared Flutter lower bound does not guarantee compatibility with current API usage.
 
 ## File map
 
@@ -268,17 +271,17 @@ Paths below are relative to `lib/`; every Dart file with non-whitespace content 
 | --- | --- |
 | root | `main.dart`: ProviderScope entry point; `firebase_options.dart`: generated platform configuration (Linux unsupported), used by bootstrap |
 | app/ | `bootstrap.dart`: initialize bindings/runApp; `app.dart`: themed router app |
-| core/models/ | `app_user.dart`: profile/copy/completion; `user_role.dart`: roles/permission getters; `membership_position.dart`: independent group-position enum; `session_state.dart`: auth/group/loading/error; `group_member.dart`: member/role/position/timestamps; `worship_group.dart`: group/members/accent; `song.dart`: song metadata/arrangements/shared presets; `arrangement.dart`: tempo/meter/source/reference URL; `vocalist_key.dart`: singer/key pair; `setlist.dart`: published/draft service model; `setlist_item.dart`: song/arrangement/key/selected vocalist reference; `chart_settings.dart`: preferences/display modes |
+| core/models/ | `app_user.dart`: profile/copy/completion/invitation preference; `user_role.dart`: roles/permission getters; `membership_position.dart`: independent group-position enum; `session_state.dart`: auth/group/loading/error; `group_member.dart`: member/role/position/timestamps; `worship_group.dart`: group/members/accent; `song.dart`: song metadata/arrangements/shared presets; `arrangement.dart`: tempo/meter/source/reference URL; `vocalist_key.dart`: singer/key pair; `setlist.dart`: published/draft service model; `setlist_item.dart`: song/arrangement/key/selected vocalist reference; `chart_settings.dart`: preferences/display modes |
 | core/mock_data/ | `mock_users.dart`: user fixtures/record type; `mock_groups.dart`: groups/membership/user lookup; `mock_songs.dart`: songs/arrangements/ChordPro; `mock_setlists.dart`: relative-date service fixtures |
 | core/firebase/ | `firebase_providers.dart`: SDK injection and explicit debug mock flag |
 | core/router/ | `route_paths.dart`: route constants/helpers; `app_router.dart`: routes/redirects/legacy router session; `router_refresh.dart`: auth-session change notifier |
 | core/theme/ | `app_colors.dart`: palette; `app_typography.dart`: Inter text styles; `app_theme.dart`: light/dark themes; `theme_providers.dart`: theme controller/provider |
-| features/auth/data/ | `auth_repository.dart`: auth/persistence/trusted-profile contracts; `firebase_auth_repository.dart`: Google/Firebase auth, profile restoration and account/code operations; `mock_auth_repository.dart`: development/test fixtures |
+| features/auth/data/ | `auth_repository.dart`: auth/persistence/profile contracts; `firebase_auth_repository.dart`: Google/Firebase auth, profile restoration and rule-validated profile writes; `mock_auth_repository.dart`: development/test fixtures |
 | features/auth/providers/ | `auth_providers.dart`: repository injection, AuthController/session and derived providers |
 | features/auth/screens/ | `login_screen.dart`: branding/sign-in/loading/errors |
-| features/groups/data/ | `group_repository.dart`: read/creation contracts; `firestore_group_repository.dart`: own group/member streams and trusted creation; `mock_group_repository.dart`: development groups/create/role simulation |
-| features/groups/providers/ | `group_providers.dart`: repository, groups, membership and role providers |
-| features/groups/screens/ | `group_selection_screen.dart`: scoped selection/empty-state Create; `group_creation_screen.dart`: validated creation/position form; `group_members_screen.dart`: legacy development-only Members UI |
+| features/groups/data/ | `invitation_repository.dart`: invitation/notification models and mutation contract; `firestore_invitation_repository.dart`: opt-in discovery, invitations, acceptance and member transactions;  `group_repository.dart`: read/creation contracts; `firestore_group_repository.dart`: own group/member streams and atomic creator bootstrap; `mock_group_repository.dart`: development groups/create/role simulation |
+| features/groups/providers/ | `invitation_providers.dart`: own pending/unread streams and repository injection;  `group_providers.dart`: repository, groups, membership and role providers |
+| features/groups/screens/ | `group_selection_screen.dart`: scoped selection/empty-state Create; `group_creation_screen.dart`: validated creation/position form; `group_members_screen.dart`: member list and Administrator invitation/edit/removal forms; retained development role menu |
 | features/setlists/data/ | `setlist_repository.dart`: contract; `mock_setlist_repository.dart`: in-memory stream/CRUD/draft/publish and current song-reference guards |
 | features/setlists/providers/ | `setlist_providers.dart`: repository/detail/list/filter/next-service providers |
 | features/setlists/screens/ | `setlists_screen.dart`: list/create/refresh; `setlist_editor_screen.dart`: metadata, song ordering/configuration, song-level preset selection, nested Song Editor, draft/publish/duplicate/delete |
@@ -292,10 +295,10 @@ Paths below are relative to `lib/`; every Dart file with non-whitespace content 
 | features/charts/widgets/ | `chord_chart_view.dart`: shared continuous renderer, measures and floating parsed-section navigation; `anchored_lyric_line.dart`: measured horizontal lyric expansion, safe wrapping and coincident-anchor fallback lanes; `chord_label.dart`: shared baseline-aware superscript labels and metrics; `source_chart_view.dart`: retained legacy preview |
 | features/charts/providers/ | `chart_providers.dart`: personal arrangement transpose offsets |
 | features/rehearsal/screens/ | `rehearsal_screen.dart`: async loading/fallbacks, selected song, toolbar, song drawer and swipe navigation |
-| features/profile/screens/ | `profile_completion_screen.dart`: required names/email confirmation; `profile_screen.dart`: account/private-code/position/preferences/session actions; `chart_settings_screen.dart`: settings controller/provider and preference controls |
+| features/profile/screens/ | `profile_completion_screen.dart`: required names/email confirmation; `profile_screen.dart`: account/privacy/invitations/position/preferences/session actions; `chart_settings_screen.dart`: settings controller/provider and preference controls |
 
-| features/profile/widgets/ | `private_invitation_code.dart`: masked server-only code reveal/hide, reset per account |
+| features/profile/widgets/ | `invitation_panel.dart`: privacy toggle, confirmed requests and dismissible acceptance notifications |
 
-Backend files: functions/index.js and foundation.js contain trusted callable operations, validation, transactions and quotas. functions/test contains emulator service/rules/transport tests. firebase.json, .firebaserc, firestore.rules and firestore.indexes.json configure the existing project and emulators. Client Firebase config is public configuration, not a server credential.
+`firestore_tests/` contains only development test dependencies and Firestore security/client-transaction tests. `firebase.json`, `.firebaserc`, `firestore.rules` and `firestore.indexes.json` configure the existing project and emulators. Client Firebase config is public configuration, not a server credential.
 
 Whitespace-only placeholders excluded from the inventory: `core/widgets/{app_scaffold,empty_state,loading_overlay,primary_button,role_selector_sheet,section_header,status_chip}.dart`, `features/songs/widgets/song_card.dart`.

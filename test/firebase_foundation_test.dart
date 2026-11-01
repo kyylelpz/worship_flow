@@ -38,7 +38,6 @@ class AccountFake
   AppUser? current;
   final changes = StreamController<AppUser?>.broadcast(sync: true);
   bool cancel = false, offline = false;
-  int codeReads = 0;
   @override
   Stream<AppUser?> watchUser() async* {
     yield current;
@@ -70,12 +69,6 @@ class AccountFake
         .copyWith(firstName: first, lastName: last, profileComplete: true);
     emit(user);
     return user;
-  }
-
-  @override
-  Future<String> getPrivateInvitationCode() async {
-    codeReads++;
-    return 'A5NJ3';
   }
 
   void dispose() => unawaited(changes.close());
@@ -166,7 +159,7 @@ Future<(ProviderContainer, AccountFake, GroupsFake)> launch(WidgetTester tester,
 }
 
 void main() {
-  test('profile mapping keeps code out of AppUser and completion explicit', () {
+  test('profile mapping keeps completion and invitation privacy explicit', () {
     final user = userFromProfile('uid', {
       'firstName': 'Avery',
       'lastName': 'Chen',
@@ -213,24 +206,16 @@ void main() {
         'Sound Engineer');
   });
   testWidgets(
-      'persistent sign-in gates incomplete profiles; fields prefill and email/code stay protected',
+      'persistent sign-in gates incomplete profiles; fields prefill and email stays protected',
       (tester) async {
     final (container, auth, _) = await launch(tester, initial: draftUser);
     expect(find.byType(ProfileCompletionScreen), findsOneWidget);
     expect(find.text('Taylor'), findsOneWidget);
     expect(find.text('Rivers'), findsOneWidget);
-    expect(find.text('•••••'), findsOneWidget);
-    expect(auth.codeReads, 0);
     final email = tester.widget<TextField>(find.descendant(
         of: find.widgetWithText(TextFormField, 'Email'),
         matching: find.byType(TextField)));
     expect(email.readOnly, isTrue);
-    await tester.tap(find.byTooltip('Reveal invitation code'));
-    await tester.pumpAndSettle();
-    expect(find.text('A5NJ3'), findsOneWidget);
-    await tester.tap(find.byTooltip('Hide invitation code'));
-    await tester.pumpAndSettle();
-    expect(find.text('A5NJ3'), findsNothing);
     container.read(routing.appRouterProvider).go('/setlists');
     await tester.pumpAndSettle();
     expect(find.byType(ProfileCompletionScreen), findsOneWidget);
@@ -336,12 +321,9 @@ void main() {
     expect(find.byType(GroupSelectionScreen), findsOneWidget);
     expect(auth.current!.profileComplete, isTrue);
   });
-  testWidgets(
-      'switching incomplete accounts resets private code visibility and prefills',
+  testWidgets('switching incomplete accounts resets profile prefills',
       (tester) async {
     final (_, auth, _) = await launch(tester, initial: draftUser);
-    await tester.tap(find.byTooltip('Reveal invitation code'));
-    await tester.pumpAndSettle();
     auth.emit(const AppUser(
         id: 'different',
         firstName: 'Other',
@@ -353,8 +335,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Other'), findsOneWidget);
     expect(find.text('Taylor'), findsNothing);
-    expect(find.text('A5NJ3'), findsNothing);
-    expect(find.text('•••••'), findsOneWidget);
   });
   testWidgets('group loading errors provide Retry without losing the account',
       (tester) async {

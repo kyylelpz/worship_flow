@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/providers/auth_providers.dart';
-import '../widgets/private_invitation_code.dart';
 
 class ProfileCompletionScreen extends ConsumerStatefulWidget {
   const ProfileCompletionScreen({super.key});
@@ -100,7 +99,6 @@ class _ProfileCompletionScreenState
                               labelText: 'Email',
                               helperText: 'From your verified Google account')),
                       const SizedBox(height: 16),
-                      PrivateInvitationCode(key: ValueKey(user?.id)),
                       if (_error != null)
                         Text(_error!,
                             style: TextStyle(
