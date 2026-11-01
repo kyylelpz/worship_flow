@@ -1,3 +1,4 @@
+import '../../features/rehearsal/services/rehearsal_metronome.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../firebase/navigation_resume.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +45,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   String? resumedUid;
 
   return GoRouter(
+    observers: [ref.read(rehearsalRouteObserverProvider)],
     initialLocation: RoutePaths.login,
     refreshListenable: refresh,
     redirect: (context, state) async {

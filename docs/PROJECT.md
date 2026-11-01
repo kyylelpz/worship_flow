@@ -6,7 +6,7 @@
 
 ## Tech stack
 
-`pubspec.yaml`: app version `0.1.0`, unpublished; Dart `>=3.4.0 <4.0.0`, Flutter `>=3.22.0`. Dependencies: Flutter SDK, `firebase_core: ^5.1.0`, `firebase_auth: ^7.0.1`, `cloud_firestore: ^7.1.0`, `google_sign_in: ^7.2.0`, `flutter_riverpod: ^2.5.1`, `go_router: ^17.5.0`, `google_fonts: ^8.2.1`, `intl: ^0.20.3`, `uuid: ^4.4.0`, `shared_preferences: ^2.5.6`, `drift: ^2.35.3`, `drift_flutter: ^0.3.1`. Development: Flutter test SDK and `flutter_lints: ^6.0.0`. These are declared constraints, not resolved versions.
+`pubspec.yaml`: app version `0.1.0`, unpublished; Dart `>=3.4.0 <4.0.0`, Flutter `>=3.22.0`. Dependencies: Flutter SDK, `firebase_core: ^5.1.0`, `firebase_auth: ^7.0.1`, `cloud_firestore: ^7.1.0`, `google_sign_in: ^7.2.0`, `flutter_riverpod: ^2.5.1`, `go_router: ^17.5.0`, `google_fonts: ^8.2.1`, `intl: ^0.20.3`, `uuid: ^4.4.0`, `shared_preferences: ^2.5.6`, `drift: ^2.35.3`, `drift_flutter: ^0.3.1`, `metronome: ^2.0.13`. Development: Flutter test SDK and `flutter_lints: ^6.0.0`. These are declared constraints, not resolved versions.
 
 Analyzer fixes were verified with Flutter **3.44.6 / Dart 3.12.2**. Current radio/reorder APIs require a newer Flutter than the declared minimum; the minimum was not changed. Themes use Material widgets and Inter typography through Google Fonts.
 
@@ -419,3 +419,12 @@ Cached playback is labeled `Offline · Cached charts · Read only`. Cached mode 
 Sign-out/account switching invalidates and purges protected content/profile/access by UID; SharedPreferences settings/navigation remain separate. Revocation cannot be discovered while disconnected: cached last-known access lasts only until server revalidation. SQLite remains unencrypted/app-sandboxed; abrupt termination may interrupt queued logical purges, while account guards still prevent cross-account reads. Corrupt/missing caches require online refresh. Web stays online-only until SQLite WASM deployment. No offline editing, queued mutations, automatic merging, background download guarantee or cross-device offline synchronization is included. Required charts must previously load online; visiting only the Setlists list may not cache arrangements.
 
 `test/offline_rehearsal_test.dart` uses production repositories/providers with a simulated Firebase transport to cover complete/incomplete caches, published/draft separation, verified UID profile restoration, cold offline resume and last song, local chart operations, reconnection/disconnection, stale refreshes, deletion, account switching and permission revocation. No Firestore schema/rules/index changes, dependencies or deployment are required.
+
+
+## Rehearsal metronome (Phase 4)
+
+The icon beside Chart Settings toggles local metronome playback using the selected exact arrangement's BPM and meter. BPM must be 1–400; supported meters are 3/4, 4/4, 6/8 and 8/8. **BPM means quarter notes for /4 and eighth notes for /8**: every bar has respectively 3, 4, 6 or 8 evenly spaced ticks, with only the first tick accented. There are no secondary accents, tempo controls or inferred defaults. Missing/unsupported metadata shows brief feedback.
+
+`rehearsal/services/rehearsal_metronome.dart` wraps the native metronome audio engine, serializes start/stop requests and cancels delayed starts. Beat scheduling runs outside Flutter rebuilds with tick callbacks disabled. Two original synthesized 20 ms mono 44.1 kHz ticks are bundled in `assets/audio/` (raw PCM16 for Android/Windows, WAV copies for Apple). No network audio, background service or saved metronome state is used. Song/arrangement changes, page navigation, disposal and app backgrounding stop playback; it never restarts automatically. A route observer preserves this behavior when Chart Settings or editors cover Rehearsal.
+
+The native adapter targets Android, iOS, macOS and Windows; Web/Linux report unavailable audio. Native hardware latency and audible tick quality require device verification. Unit/widget tests verify configuration, bundled audio handoff, cancellation, button state, missing BPM and navigation stops; they do not measure physical audio timing.

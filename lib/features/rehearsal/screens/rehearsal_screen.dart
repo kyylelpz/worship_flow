@@ -1,3 +1,4 @@
+import '../services/rehearsal_metronome.dart';
 import '../../groups/providers/group_providers.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../../core/models/song.dart';
@@ -120,7 +121,51 @@ class _RehearsalBody extends ConsumerStatefulWidget {
   ConsumerState<_RehearsalBody> createState() => _RehearsalBodyState();
 }
 
-class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
+class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
+    with RouteAware, WidgetsBindingObserver {
+  late final RehearsalMetronome _metronome;
+  late final RouteObserver<PageRoute<dynamic>> _routeObserver;
+  PageRoute<dynamic>? _route;
+  String? _metronomeSong;
+
+  @override
+  void initState() {
+    super.initState();
+    _metronome = RehearsalMetronome(ref.read(metronomeAudioProvider));
+    _routeObserver = ref.read(rehearsalRouteObserverProvider);
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute && route != _route) {
+      _routeObserver.unsubscribe(this);
+      _route = route;
+      _routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPushNext() => _metronome.stop();
+
+  @override
+  void didPop() => _metronome.stop();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _metronome.stop();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _routeObserver.unsubscribe(this);
+    _metronome.dispose();
+    super.dispose();
+  }
+
   int _selected = 0;
   double _drag = 0;
   bool _showSections = true;
@@ -225,6 +270,12 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
     final arrangement = song?.arrangements
         .where((arrangement) => arrangement.id == item?.arrangementId)
         .firstOrNull;
+    final metronomeSong =
+        '${item?.songId}/${item?.arrangementId}/$index/${arrangement?.bpm}/${arrangement?.timeSignature}';
+    if (_metronomeSong != metronomeSong) {
+      _metronome.stop();
+      _metronomeSong = metronomeSong;
+    }
     final settings = ref.watch(chartSettingsProvider);
 
     final personal =
@@ -247,6 +298,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
 
     void select(int next) {
       if (next >= 0 && next < items.length && next != index) {
+        _metronome.stop();
         setState(() => _selected = next);
       }
     }
@@ -326,6 +378,42 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
             icon: const Icon(Icons.tune_rounded),
             onPressed: () => context.push(RoutePaths.chartSettings),
           ),
+          ValueListenableBuilder<bool>(
+            valueListenable: _metronome,
+            builder: (context, playing, _) => Semantics(
+              toggled: playing,
+              child: IconButton(
+                tooltip: playing ? 'Stop metronome' : 'Start metronome',
+                color: playing
+                    ? Theme.of(context).colorScheme.primary
+                    : Theme.of(context).colorScheme.onSurfaceVariant,
+                icon: const Icon(Icons.av_timer_rounded),
+                onPressed: () async {
+                  if (playing) {
+                    _metronome.stop();
+                    return;
+                  }
+                  final pattern = MetronomePattern.parse(
+                      arrangement?.bpm, arrangement?.timeSignature);
+                  if (pattern == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text(
+                            'Metronome needs a BPM from 1–400 and 3/4, 4/4, 6/8 or 8/8 time.')));
+                    return;
+                  }
+                  try {
+                    await _metronome.start(pattern);
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content:
+                              Text('Metronome audio unavailable. Try again.')));
+                    }
+                  }
+                },
+              ),
+            ),
+          ),
         ],
       ),
       drawer: Drawer(
@@ -336,7 +424,10 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
               ListTile(
                 leading: const Icon(Icons.arrow_back),
                 title: const Text('Back to Setlists'),
-                onTap: () => context.go(RoutePaths.setlists),
+                onTap: () {
+                  _metronome.stop();
+                  context.go(RoutePaths.setlists);
+                },
               ),
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -371,6 +462,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                         ? 'View Published Setlist'
                         : 'Preview Draft'),
                     onPressed: () {
+                      _metronome.stop();
                       setState(() {
                         _previewDraft = !_previewDraft;
                         _selected = 0;
