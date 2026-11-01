@@ -186,4 +186,52 @@ void main() {
         findsOneWidget);
     expect(t.takeException(), isNull);
   });
+  for (final explicit in [false, true]) {
+    for (final blanks in [0, 1, 3]) {
+      for (final mode in [
+        ChartDisplayMode.lyricsAndChords,
+        ChartDisplayMode.chordsOnly
+      ]) {
+        testWidgets(
+            '${explicit ? 'explicit' : 'ordinary'} grid: $blanks blank rows in $mode separate groups without adding timing',
+            (t) async {
+          const measures =
+              '| [1] - - - | [5/1] - - - |\n| [b7/1] - - - | [4/1] - - - |';
+          final body =
+              '$measures\n${List.filled(blanks, "\n").join()}$measures';
+          final source =
+              '{key: E}\n${explicit ? "{start_of_grid: Chorus}" : "{section: Chorus}"}\n$body${explicit ? "\n{end_of_grid}" : ""}\n(2x)\n(4x)';
+          final parsed = const ChordProParser().parse(source);
+          await render(t, source,
+              width: 500,
+              settings: ChartSettings(displayMode: mode, useNashville: true));
+          final grid = t
+              .widgetList<CompactChordGrid>(find.byType(CompactChordGrid))
+              .firstWhere((g) => g.rows.any((r) => r.measures.isNotEmpty));
+          expect(grid.rows.expand((r) => r.measures), hasLength(8));
+          expect(grid.rows.where((r) => r.measures.isEmpty && r.text == ''),
+              hasLength(blanks));
+          expect(grid.rows.expand((r) => r.measures).map((m) => m.cells.first),
+              ['1', '5/1', 'b7/1', '4/1', '1', '5/1', 'b7/1', '4/1']);
+          Rect measure(int index) =>
+              t.getRect(find.byKey(ValueKey('compact-measure-$index')));
+          final regularGap = measure(2).top - measure(0).bottom;
+          final groupGap = measure(4).top - measure(2).bottom;
+          expect(groupGap, closeTo(regularGap + 12 * blanks, .01));
+          expect(measure(0).left, closeTo(measure(4).left, .01));
+          expect(measure(1).left, closeTo(measure(5).left, .01));
+          expect(find.text('(2x)'), findsOneWidget);
+          expect(find.text('(4x)'), findsOneWidget);
+          if (explicit) {
+            expect(parsed.grids.single.measures, hasLength(8));
+            expect(
+                parsed.grids.single.measures.every((m) => m.slots.length == 4),
+                true);
+          }
+          expect(parsed.source, source);
+          expect(t.takeException(), isNull);
+        });
+      }
+    }
+  }
 }

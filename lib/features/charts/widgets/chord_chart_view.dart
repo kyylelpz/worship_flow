@@ -144,8 +144,12 @@ class _ChordChartViewState extends State<ChordChartView> {
             else if (line.original.kind == ChartLineKind.blank)
               const CompactGridRow([], text: ''),
         ]);
-    Widget gridView(DisplayTimingGrid grid) =>
-        CompactChordGrid(rows: timingGridRows(grid), style: chordStyle);
+    Widget gridView(DisplayTimingGrid grid) => CompactChordGrid(
+        rows: timingGridRows(grid,
+            sourceLines: chart.document.sections
+                .where((s) => s.id == grid.original.sectionId)
+                .expand((s) => s.lines)),
+        style: chordStyle);
     List<Widget> lyricLines(List<DisplayChartLine> lines) {
       final result = <Widget>[];
       var passage = <DisplayChartLine>[];

@@ -53,7 +53,12 @@ CompactGridRow instrumentalGridRow(DisplayChartLine line) {
   return CompactGridRow(measures);
 }
 
-List<CompactGridRow> timingGridRows(DisplayTimingGrid grid) {
+List<CompactGridRow> timingGridRows(DisplayTimingGrid grid,
+    {Iterable<ChartLine> sourceLines = const []}) {
+  final blankLines = sourceLines
+      .where((l) => l.kind == ChartLineKind.blank)
+      .map((l) => l.sourceLine)
+      .toList();
   final rows = <CompactGridRow>[];
   var measures = <CompactMeasure>[];
   int? sourceLine;
@@ -61,6 +66,12 @@ List<CompactGridRow> timingGridRows(DisplayTimingGrid grid) {
     final original = grid.original.measures[i];
     if (sourceLine != null && sourceLine != original.sourceLine) {
       rows.add(CompactGridRow(measures));
+      // Use actual blank rows, not gaps caused by intervening directives.
+      for (final line in blankLines) {
+        if (line > sourceLine && line < original.sourceLine) {
+          rows.add(const CompactGridRow([], text: ''));
+        }
+      }
       measures = [];
     }
     sourceLine = original.sourceLine;
@@ -138,6 +149,11 @@ class CompactChordGrid extends StatelessWidget {
       final children = <Widget>[];
       var index = 0;
       for (final sourceRow in rows) {
+        if (sourceRow.measures.isEmpty && sourceRow.text?.trim() == '') {
+          // A presentation boundary only: never a measure, slot or rest.
+          children.add(SizedBox(height: scaler.scale(12)));
+          continue;
+        }
         if (sourceRow.text != null) {
           children.add(Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
