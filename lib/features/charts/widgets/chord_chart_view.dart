@@ -15,10 +15,14 @@ class ChordChartView extends StatefulWidget {
       {super.key,
       required this.chart,
       required this.settings,
+      this.sectionNavigationEnabled = true,
       this.showSections = true,
       this.reserveSectionSpace = true});
   final DisplayChart chart;
   final ChartSettings settings;
+
+  /// False removes tracking and navigation layout; showSections only hides UI.
+  final bool sectionNavigationEnabled;
   final bool showSections;
   final bool reserveSectionSpace;
 
@@ -41,12 +45,14 @@ class _ChordChartViewState extends State<ChordChartView> {
   double? _lastTextScale;
 
   void _scheduleLayoutRefresh() {
-    if (_layoutRefreshScheduled) return;
+    if (!widget.sectionNavigationEnabled || _layoutRefreshScheduled) return;
     _layoutRefreshScheduled = true;
     final jumpGeneration = _jumpGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _layoutRefreshScheduled = false;
-      if (!mounted || !_scroll.hasClients) return;
+      if (!mounted || !widget.sectionNavigationEnabled || !_scroll.hasClients) {
+        return;
+      }
       final viewport = _viewportKey.currentContext?.findRenderObject();
       if (viewport is! RenderBox || !viewport.hasSize) return;
       _sectionOffsets.clear();
@@ -64,13 +70,18 @@ class _ChordChartViewState extends State<ChordChartView> {
   }
 
   bool _scrollEnded(ScrollEndNotification notification) {
-    if (notification.depth == 0 &&
+    if (widget.sectionNavigationEnabled &&
+        notification.depth == 0 &&
         notification.metrics.axis == Axis.vertical &&
         !_jumping) {
       // ScrollEnd is dispatched just before ScrollPosition marks itself idle.
       final jumpGeneration = _jumpGeneration;
       scheduleMicrotask(() {
-        if (jumpGeneration == _jumpGeneration) _updateActive();
+        if (mounted &&
+            widget.sectionNavigationEnabled &&
+            jumpGeneration == _jumpGeneration) {
+          _updateActive();
+        }
       });
     }
     return false;
@@ -78,6 +89,7 @@ class _ChordChartViewState extends State<ChordChartView> {
 
   void _updateActive() {
     if (!mounted ||
+        !widget.sectionNavigationEnabled ||
         _needsActiveUpdate ||
         _sections.isEmpty ||
         !_scroll.hasClients ||
@@ -99,6 +111,7 @@ class _ChordChartViewState extends State<ChordChartView> {
   }
 
   void _jumpTo(DisplayChartSection section) {
+    if (!widget.sectionNavigationEnabled) return;
     final target = _anchors[section.id]?.currentContext;
     if (target == null) return;
     _jumpGeneration++;
@@ -114,21 +127,34 @@ class _ChordChartViewState extends State<ChordChartView> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _needsActiveUpdate = true;
+    if (widget.sectionNavigationEnabled) _needsActiveUpdate = true;
   }
 
   @override
   void didUpdateWidget(ChordChartView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.settings != widget.settings ||
-        oldWidget.chart.document.key?.name != widget.chart.document.key?.name) {
+    if (oldWidget.sectionNavigationEnabled != widget.sectionNavigationEnabled) {
+      _jumpGeneration++;
+      _anchors.clear();
+      _sectionOffsets.clear();
+      _sections = const [];
+      _needsActiveUpdate = true;
+      _lastViewportSize = null;
+      _lastTextScale = null;
+    }
+    if (widget.sectionNavigationEnabled &&
+        (oldWidget.settings != widget.settings ||
+            oldWidget.chart.document.key?.name !=
+                widget.chart.document.key?.name)) {
       _needsActiveUpdate = true;
     }
     if (oldWidget.chart.document.source != widget.chart.document.source) {
-      _anchors.clear();
-      _activeId.value = null;
-      _sectionOffsets.clear();
-      _needsActiveUpdate = true;
+      if (widget.sectionNavigationEnabled) {
+        _anchors.clear();
+        _activeId.value = null;
+        _sectionOffsets.clear();
+        _needsActiveUpdate = true;
+      }
       if (_scroll.hasClients) _scroll.jumpTo(0);
     }
   }
@@ -171,13 +197,15 @@ class _ChordChartViewState extends State<ChordChartView> {
                 l.original.directive?.kind == DirectiveKind.comment ||
                 l.original.directive?.kind == DirectiveKind.unknown))
         .toList();
-    _sections = sections;
-    if (_needsActiveUpdate) {
-      _needsActiveUpdate = false;
-      _scheduleLayoutRefresh();
-    }
-    for (final section in sections) {
-      _anchors.putIfAbsent(section.id, () => GlobalKey());
+    if (widget.sectionNavigationEnabled) {
+      _sections = sections;
+      if (_needsActiveUpdate) {
+        _needsActiveUpdate = false;
+        _scheduleLayoutRefresh();
+      }
+      for (final section in sections) {
+        _anchors.putIfAbsent(section.id, () => GlobalKey());
+      }
     }
     Widget sequence(Iterable<DisplayChartLine> lines) =>
         CompactChordGrid(style: chordStyle, rows: [
@@ -258,7 +286,7 @@ class _ChordChartViewState extends State<ChordChartView> {
       final timingSection =
           chart.document.grids.any((g) => g.sectionId == section.id);
       return Padding(
-        key: _anchors[section.id],
+        key: widget.sectionNavigationEnabled ? _anchors[section.id] : null,
         padding: const EdgeInsets.only(bottom: 18),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -308,135 +336,161 @@ class _ChordChartViewState extends State<ChordChartView> {
       );
     }
 
-    final labels = _sectionLabels(sections);
+    final labels = widget.sectionNavigationEnabled
+        ? _sectionLabels(sections)
+        : const <String>[];
     return SafeArea(
       top: false,
       child: LayoutBuilder(builder: (context, constraints) {
-        final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
-        final textScale = MediaQuery.textScalerOf(context).scale(16);
-        if (_lastViewportSize != viewportSize || _lastTextScale != textScale) {
-          _lastViewportSize = viewportSize;
-          _lastTextScale = textScale;
-          _scheduleLayoutRefresh();
+        if (widget.sectionNavigationEnabled) {
+          final viewportSize =
+              Size(constraints.maxWidth, constraints.maxHeight);
+          final textScale = MediaQuery.textScalerOf(context).scale(16);
+          if (_lastViewportSize != viewportSize ||
+              _lastTextScale != textScale) {
+            _lastViewportSize = viewportSize;
+            _lastTextScale = textScale;
+            _scheduleLayoutRefresh();
+          }
         }
 
-        final bubbleWidth = MediaQuery.textScalerOf(context)
-            .scale(24)
-            .clamp(48.0,
-                math.max(48.0, math.min(96.0, constraints.maxWidth * .35)))
-            .toDouble();
-        return Stack(key: _viewportKey, fit: StackFit.expand, children: [
-          NotificationListener<ScrollEndNotification>(
-              onNotification: _scrollEnded,
-              child: Scrollbar(
-                controller: _scroll,
-                child: SingleChildScrollView(
-                    key: const ValueKey('chart-scroll'),
-                    controller: _scroll,
-                    // Keep this gutter even when hidden: toggling never reflows lyrics.
-                    padding: EdgeInsets.fromLTRB(12, 12,
-                        widget.reserveSectionSpace ? bubbleWidth + 20 : 12, 12),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                          constraints:
-                              BoxConstraints(maxWidth: settings.chartWidth),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                for (final warning in chart.document.warnings)
-                                  Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: Text('Chart warning: $warning',
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                  color: theme
-                                                      .colorScheme.error))),
-                                if (sections.isEmpty)
-                                  const Text('No chart content available.'),
-                                for (final section in sections)
-                                  sectionView(section),
-                              ])),
-                    )),
+        final bubbleWidth = !widget.sectionNavigationEnabled
+            ? 0.0
+            : MediaQuery.textScalerOf(context)
+                .scale(24)
+                .clamp(48.0,
+                    math.max(48.0, math.min(96.0, constraints.maxWidth * .35)))
+                .toDouble();
+        final chartScroll = Scrollbar(
+          controller: _scroll,
+          child: SingleChildScrollView(
+              key: const ValueKey('chart-scroll'),
+              controller: _scroll,
+              // Keep this gutter even when hidden: toggling never reflows lyrics.
+              padding: EdgeInsets.fromLTRB(
+                  12,
+                  12,
+                  widget.sectionNavigationEnabled && widget.reserveSectionSpace
+                      ? bubbleWidth + 20
+                      : 12,
+                  12),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: settings.chartWidth),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final warning in chart.document.warnings)
+                            Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text('Chart warning: $warning',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                        color: theme.colorScheme.error))),
+                          if (sections.isEmpty)
+                            const Text('No chart content available.'),
+                          for (final section in sections) sectionView(section),
+                        ])),
               )),
-          if (widget.showSections && sections.isNotEmpty)
-            Positioned(
-              top: 8,
-              right: 8,
-              width: bubbleWidth,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                    maxHeight:
-                        math.max(0, math.min(360, constraints.maxHeight - 16))),
-                child: Scrollbar(
-                  controller: _sectionScroll,
-                  child: ValueListenableBuilder<String?>(
-                      valueListenable: _activeId,
-                      builder: (context, activeId, _) => ListView.separated(
-                            key: const ValueKey('section-bubbles'),
-                            controller: _sectionScroll,
-                            primary: false,
-                            shrinkWrap: true,
-                            padding: EdgeInsets.zero,
-                            itemCount: sections.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 4),
-                            itemBuilder: (context, index) {
-                              final section = sections[index];
-                              final selected =
-                                  (activeId ?? sections.first.id) == section.id;
-                              return Semantics(
-                                  key: ValueKey('section-state-${section.id}'),
-                                  selected: selected,
-                                  label:
-                                      '${section.label}, section ${index + 1} of ${sections.length}',
-                                  child: Tooltip(
-                                      message:
-                                          '${section.label} · ${index + 1}/${sections.length}',
-                                      child: Material(
-                                          elevation: 2,
-                                          shape: const StadiumBorder(),
-                                          color: selected
-                                              ? theme
-                                                  .colorScheme.primaryContainer
-                                              : theme.colorScheme
-                                                  .surfaceContainerHigh,
-                                          child: TextButton(
-                                            key: ValueKey(
-                                                'section-bubble-${section.id}'),
-                                            style: TextButton.styleFrom(
-                                                minimumSize: const Size(48, 48),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
+        );
+        return Stack(
+            key: widget.sectionNavigationEnabled ? _viewportKey : null,
+            fit: StackFit.expand,
+            children: [
+              if (widget.sectionNavigationEnabled)
+                NotificationListener<ScrollEndNotification>(
+                    onNotification: _scrollEnded, child: chartScroll)
+              else
+                chartScroll,
+              if (widget.sectionNavigationEnabled &&
+                  widget.showSections &&
+                  sections.isNotEmpty)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  width: bubbleWidth,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxHeight: math.max(
+                            0, math.min(360, constraints.maxHeight - 16))),
+                    child: Scrollbar(
+                      controller: _sectionScroll,
+                      child: ValueListenableBuilder<String?>(
+                          valueListenable: _activeId,
+                          builder: (context, activeId, _) => ListView.separated(
+                                key: const ValueKey('section-bubbles'),
+                                controller: _sectionScroll,
+                                primary: false,
+                                shrinkWrap: true,
+                                padding: EdgeInsets.zero,
+                                itemCount: sections.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 4),
+                                itemBuilder: (context, index) {
+                                  final section = sections[index];
+                                  final selected =
+                                      (activeId ?? sections.first.id) ==
+                                          section.id;
+                                  return Semantics(
+                                      key: ValueKey(
+                                          'section-state-${section.id}'),
+                                      selected: selected,
+                                      label:
+                                          '${section.label}, section ${index + 1} of ${sections.length}',
+                                      child: Tooltip(
+                                          message:
+                                              '${section.label} · ${index + 1}/${sections.length}',
+                                          child: Material(
+                                              elevation: 2,
+                                              shape: const StadiumBorder(),
+                                              color: selected
+                                                  ? theme.colorScheme
+                                                      .primaryContainer
+                                                  : theme.colorScheme
+                                                      .surfaceContainerHigh,
+                                              child: TextButton(
+                                                key: ValueKey(
+                                                    'section-bubble-${section.id}'),
+                                                style: TextButton.styleFrom(
+                                                    minimumSize:
+                                                        const Size(48, 48),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
                                                         horizontal: 4,
                                                         vertical: 6),
-                                                foregroundColor: selected
-                                                    ? theme.colorScheme
-                                                        .onPrimaryContainer
-                                                    : theme.colorScheme
-                                                        .onSurfaceVariant,
-                                                shape: const StadiumBorder()),
-                                            onPressed: () => _jumpTo(section),
-                                            child: Text(labels[index],
-                                                textAlign: TextAlign.center,
-                                                style: theme
-                                                    .textTheme.labelMedium
-                                                    ?.copyWith(
-                                                        color: selected
-                                                            ? theme.colorScheme
-                                                                .onPrimaryContainer
-                                                            : theme.colorScheme
-                                                                .onSurfaceVariant,
-                                                        fontWeight: selected
-                                                            ? FontWeight.w800
-                                                            : FontWeight.w600)),
-                                          ))));
-                            },
-                          )),
+                                                    foregroundColor: selected
+                                                        ? theme.colorScheme
+                                                            .onPrimaryContainer
+                                                        : theme.colorScheme
+                                                            .onSurfaceVariant,
+                                                    shape:
+                                                        const StadiumBorder()),
+                                                onPressed: () =>
+                                                    _jumpTo(section),
+                                                child: Text(labels[index],
+                                                    textAlign: TextAlign.center,
+                                                    style: theme
+                                                        .textTheme.labelMedium
+                                                        ?.copyWith(
+                                                            color: selected
+                                                                ? theme
+                                                                    .colorScheme
+                                                                    .onPrimaryContainer
+                                                                : theme
+                                                                    .colorScheme
+                                                                    .onSurfaceVariant,
+                                                            fontWeight: selected
+                                                                ? FontWeight
+                                                                    .w800
+                                                                : FontWeight
+                                                                    .w600)),
+                                              ))));
+                                },
+                              )),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-        ]);
+            ]);
       }),
     );
   }

@@ -252,17 +252,10 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
                 for (final shortcut in const <(String, String, String)>[
                   ('[Chord]', '[', ']'),
                   ('Section', '{section: ', '}'),
-                  ('Verse', '{start_of_verse: ', '}'),
-                  ('End verse', '{end_of_verse}', ''),
-                  ('Chorus', '{start_of_chorus}', ''),
-                  ('End chorus', '{end_of_chorus}', ''),
-                  ('Key', '{key: ', '}'),
-                  ('Tempo', '{tempo: ', '}'),
-                  ('Time', '{time: ', '}'),
                   ('Grid', '{start_of_grid: ', '}'),
                   ('End grid', '{end_of_grid}', ''),
-                  ('Bar', ' | ', ''),
-                  ('Sustain', ' - ', ''),
+                  ('Bar', '| ', ''),
+                  ('Sustain', '- ', ''),
                 ])
                   Padding(
                       padding: const EdgeInsets.only(right: 6),
@@ -414,6 +407,7 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
                           chart: const ChartTransformer()
                               .display(_document!, effective),
                           settings: effective,
+                          sectionNavigationEnabled: false,
                           showSections: false,
                           reserveSectionSpace: false)),
             ]));

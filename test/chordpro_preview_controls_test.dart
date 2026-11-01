@@ -55,6 +55,23 @@ void main() {
     final chart = t.widget<ChordChartView>(find.byType(ChordChartView));
     expect(chart.settings.useNashville, false);
     expect(chart.settings.displayMode, ChartDisplayMode.lyricsAndChords);
+    expect(chart.sectionNavigationEnabled, false);
+    expect(
+        find.descendant(
+            of: find.byType(ChordChartView),
+            matching: find.byType(NotificationListener<ScrollEndNotification>)),
+        findsNothing);
+    expect(
+        find.descendant(
+            of: find.byType(ChordChartView),
+            matching: find
+                .byWidgetPredicate((w) => w is Padding && w.key is GlobalKey)),
+        findsNothing);
+    expect(
+        find.descendant(
+            of: find.byType(ChordChartView),
+            matching: find.byType(ValueListenableBuilder<String?>)),
+        findsNothing);
     expect(chart.showSections, false);
     expect(chart.reserveSectionSpace, false);
     expect(

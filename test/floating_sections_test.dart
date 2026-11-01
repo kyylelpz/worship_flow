@@ -22,6 +22,7 @@ Future<DisplayChart> pumpChart(WidgetTester tester,
     double scale = 1,
     EdgeInsets padding = EdgeInsets.zero,
     bool show = true,
+    bool navigationEnabled = true,
     String? source,
     int transpose = 0,
     ChartSettings settings = const ChartSettings()}) async {
@@ -40,7 +41,10 @@ Future<DisplayChart> pumpChart(WidgetTester tester,
                 width: width,
                 height: height,
                 child: ChordChartView(
-                    chart: chart, settings: settings, showSections: show)))),
+                    chart: chart,
+                    settings: settings,
+                    showSections: show,
+                    sectionNavigationEnabled: navigationEnabled)))),
   )));
   await tester.pumpAndSettle();
   return chart;
@@ -288,5 +292,78 @@ void main() {
     await tester.pumpAndSettle();
     expect(selected(tester, chorus.id), true);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'disabled navigation has no tracking listener, section anchors, state builder or gutter',
+      (tester) async {
+    for (final scale in [1.0, 1.6]) {
+      await pumpChart(tester,
+          navigationEnabled: false,
+          scale: scale,
+          transpose: 2,
+          settings: const ChartSettings(lyricsFontSize: 22));
+      final chart = find.byType(ChordChartView);
+      expect(
+          find.descendant(
+              of: chart,
+              matching:
+                  find.byType(NotificationListener<ScrollEndNotification>)),
+          findsNothing);
+      expect(
+          find.descendant(
+              of: chart,
+              matching: find.byWidgetPredicate(
+                  (w) => w is Padding && w.key is GlobalKey)),
+          findsNothing);
+      expect(
+          find.descendant(
+              of: chart,
+              matching: find.byType(ValueListenableBuilder<String?>)),
+          findsNothing);
+      expect(find.byKey(const ValueKey('section-bubbles')), findsNothing);
+      final scroll = tester.widget<SingleChildScrollView>(
+          find.byKey(const ValueKey('chart-scroll')));
+      expect(scroll.padding, const EdgeInsets.all(12));
+      final lyric = tester
+          .widget<AnchoredLyricLine>(find.byType(AnchoredLyricLine).first);
+      await tester.drag(
+          find.byKey(const ValueKey('chart-scroll')), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(chartScroll(tester).offset, greaterThan(0));
+      expect(
+          tester
+              .widget<AnchoredLyricLine>(find.byType(AnchoredLyricLine).first),
+          same(lyric));
+      expect(tester.takeException(), isNull);
+    }
+  });
+  testWidgets(
+      'temporarily hidden navigation still tracks; disabling and re-enabling reconnects correctly',
+      (tester) async {
+    final chart = await pumpChart(tester, show: false);
+    expect(find.byType(NotificationListener<ScrollEndNotification>),
+        findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Padding && w.key is GlobalKey),
+        findsWidgets);
+    await tester.drag(
+        find.byKey(const ValueKey('chart-scroll')), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    await pumpChart(tester);
+    expect(selected(tester, chart.sections.last.id), true);
+    await pumpChart(tester, navigationEnabled: false);
+    expect(
+        find.byType(NotificationListener<ScrollEndNotification>), findsNothing);
+    expect(find.byWidgetPredicate((w) => w is Padding && w.key is GlobalKey),
+        findsNothing);
+    await tester.drag(
+        find.byKey(const ValueKey('chart-scroll')), const Offset(0, 5000));
+    await tester.pumpAndSettle();
+    await pumpChart(tester);
+    final intro = chart.sections.firstWhere((s) => s.label == 'Intro');
+    expect(selected(tester, intro.id), true);
+    final chorus = chart.sections.firstWhere((s) => s.label == 'Chorus');
+    await tester.tap(find.byKey(ValueKey('section-bubble-${chorus.id}')));
+    await tester.pumpAndSettle();
+    expect(selected(tester, chorus.id), true);
   });
 }
