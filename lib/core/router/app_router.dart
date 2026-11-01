@@ -32,7 +32,7 @@ class SessionController extends StateNotifier<SessionState> {
 }
 
 final sessionProvider =
-    StateNotifierProvider<SessionController, SessionState>((ref) {
+StateNotifierProvider<SessionController, SessionState>((ref) {
   // Legacy provider; authentication and routing use auth.sessionProvider.
   return SessionController(const SessionState());
 });
@@ -109,22 +109,52 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(
-          path: RoutePaths.sessionLoading,
-          builder: (_, __) => Consumer(builder: (context, ref, _) {
-                final resume = ref.watch(sessionResumeProvider);
-                return Scaffold(
-                    body: Center(
-                        child: resume.hasError
-                            ? Column(mainAxisSize: MainAxisSize.min, children: [
-                                const Text(
-                                    'Could not restore your last session. Check your connection.'),
-                                TextButton(
-                                    onPressed: () =>
-                                        ref.invalidate(sessionResumeProvider),
-                                    child: const Text('Retry'))
-                              ])
-                            : const CircularProgressIndicator()));
-              })),
+        path: RoutePaths.sessionLoading,
+        builder: (_, __) => Consumer(
+          builder: (context, ref, _) {
+            final resume = ref.watch(sessionResumeProvider);
+            return Scaffold(
+              backgroundColor: const Color(0xFF101A3A),
+              body: Center(
+                child: resume.hasError
+                    ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Could not restore your last session. Check your connection.',
+                      style: TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () =>
+                          ref.invalidate(sessionResumeProvider),
+                      child: const Text(
+                        'Retry',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
+                )
+                    : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/images/worship-flow-icon-dark.png',
+                      width: 200,
+                      height: 200,
+                    ),
+                    const SizedBox(height: 32),
+                    const CircularProgressIndicator(
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
       GoRoute(
           path: RoutePaths.profileComplete,
           builder: (_, __) => ProfileCompletionScreen(
@@ -158,15 +188,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: RoutePaths.setlistEditor,
           onExit: (_, state) async =>
-              await ref
-                  .read(setlistExitGuardsProvider)[
-                      state.pathParameters['setlistId']]
-                  ?.call() ??
+          await ref
+              .read(setlistExitGuardsProvider)[
+          state.pathParameters['setlistId']]
+              ?.call() ??
               true,
           redirect: (_, __) =>
-              ref.read(auth.currentRoleProvider)?.canManageSetlists == true
-                  ? null
-                  : RoutePaths.setlists,
+          ref.read(auth.currentRoleProvider)?.canManageSetlists == true
+              ? null
+              : RoutePaths.setlists,
           builder: (_, state) => SetlistEditorScreen(
               setlistId: state.pathParameters['setlistId']!)),
       GoRoute(
