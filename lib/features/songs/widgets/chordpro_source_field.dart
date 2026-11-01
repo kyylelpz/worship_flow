@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
+import '../../../core/models/vocalist_key.dart';
 import '../data/song_validation.dart';
 import '../screens/basic_chordpro_editor_screen.dart';
 
 /// Canonical draft editing. Navigation returns text; the arrangement repository
-/// owns persistence, so Phase 3B can replace the basic editor independently.
+/// owns persistence; the editor only returns a draft.
 class ChordProSourceField extends StatelessWidget {
   const ChordProSourceField(
-      {super.key, required this.controller, this.readOnly = false});
+      {super.key,
+      required this.controller,
+      this.readOnly = false,
+      this.vocalistKeys = const [],
+      this.timeSignature = '4/4'});
   final TextEditingController controller;
   final bool readOnly;
+  final List<VocalistKey> vocalistKeys;
+  final String timeSignature;
   @override
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -22,7 +29,9 @@ class ChordProSourceField extends StatelessWidget {
                       ? null
                       : () async {
                           final text = await openChordProEditor(
-                              context, controller.text);
+                              context, controller.text,
+                              vocalistKeys: vocalistKeys,
+                              timeSignature: timeSignature);
                           if (text != null && context.mounted) {
                             controller.text = text;
                           }

@@ -3,13 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/models/arrangement.dart';
+import '../../../core/models/vocalist_key.dart';
 import '../data/song_validation.dart';
 import '../providers/song_providers.dart';
 import '../widgets/chordpro_source_field.dart';
 
 class ArrangementEditorScreen extends ConsumerStatefulWidget {
-  const ArrangementEditorScreen({super.key, this.arrangement});
+  const ArrangementEditorScreen(
+      {super.key, this.arrangement, this.vocalistKeys = const []});
   final Arrangement? arrangement;
+  final List<VocalistKey> vocalistKeys;
   @override
   ConsumerState<ArrangementEditorScreen> createState() =>
       _ArrangementEditorScreenState();
@@ -95,6 +98,7 @@ class _ArrangementEditorScreenState
               TextFormField(
                   readOnly: !ref.watch(canManageSongsProvider),
                   controller: _meter,
+                  onChanged: (_) => setState(() {}),
                   decoration:
                       const InputDecoration(labelText: 'Time signature'),
                   validator: SongValidation.meter),
@@ -108,6 +112,8 @@ class _ArrangementEditorScreenState
               const SizedBox(height: 16),
               ChordProSourceField(
                   controller: _source,
+                  vocalistKeys: widget.vocalistKeys,
+                  timeSignature: _meter.text,
                   readOnly: !ref.watch(canManageSongsProvider)),
             ])),
       );

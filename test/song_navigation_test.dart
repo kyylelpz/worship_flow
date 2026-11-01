@@ -30,7 +30,7 @@ Future<void> saveNewSong(WidgetTester tester) async {
   await tester.tap(find.text('Edit'));
   await tester.pumpAndSettle();
   await management.enter(tester, 'Canonical ChordPro', '{key: G}\n[G]A song');
-  await tester.tap(find.text('Use Source'));
+  await tester.tap(find.byTooltip('Save'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Save Arrangement'));
   await tester.pumpAndSettle();
@@ -188,7 +188,7 @@ void main() {
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     await management.enter(tester, 'Canonical ChordPro', '{key: G}\n[G]Draft');
-    await tester.tap(find.text('Use Source'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save Arrangement'));
     await tester.pumpAndSettle();

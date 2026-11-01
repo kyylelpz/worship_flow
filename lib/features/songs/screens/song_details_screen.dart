@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../providers/song_providers.dart';
 import '../widgets/song_action_helpers.dart';
 import '../../../core/router/route_paths.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
 
 class SongDetailsScreen extends ConsumerWidget {

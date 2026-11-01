@@ -212,7 +212,12 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
     final value = await Navigator.of(context).push<Arrangement>(
         MaterialPageRoute(
             fullscreenDialog: true,
-            builder: (_) => ArrangementEditorScreen(arrangement: arrangement)));
+            builder: (_) => ArrangementEditorScreen(
+                    arrangement: arrangement,
+                    vocalistKeys: [
+                      for (final v in _vocalists)
+                        VocalistKey(vocalistName: v.name.text, key: v.key.text)
+                    ])));
     if (value == null || !mounted) return;
     if (song == null) {
       setState(() {
@@ -362,7 +367,8 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _category,
-                    decoration: const InputDecoration(labelText: 'Custom category'),
+                    decoration:
+                        const InputDecoration(labelText: 'Custom category'),
                     validator: SongValidation.requiredText,
                   ),
                 ],
@@ -407,7 +413,7 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
             const SizedBox(height: 20),
             Text('Vocal Key Presets',
                 style: Theme.of(context).textTheme.titleLarge),
-            for (final v in _vocalists)...[
+            for (final v in _vocalists) ...[
               const SizedBox(height: 16),
               Row(key: ObjectKey(v), children: [
                 Expanded(

@@ -69,7 +69,7 @@ void main() {
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, data.originalSource);
-    await tester.tap(find.text('Use Source'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save Arrangement'));
     await tester.pumpAndSettle();
@@ -156,7 +156,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Use Source'));
+    await tester.tap(find.byTooltip('Save'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save Arrangement'));
     await tester.pumpAndSettle();
