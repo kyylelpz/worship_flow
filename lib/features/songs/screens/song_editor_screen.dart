@@ -185,6 +185,11 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
       }
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Song saved.')));
+      // A permission-denied listener is terminal, even after access is fixed.
+      // Reattach only the failed subscription; healthy streams update normally.
+      if (ref.read(groupSongsProvider).hasError) {
+        ref.invalidate(groupSongsProvider);
+      }
       setState(() => _allowExit = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;

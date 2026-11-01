@@ -2,7 +2,7 @@ import {readFile} from 'node:fs/promises';
 import {before,after,beforeEach,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
-import {doc,collection,getDoc,getDocs,setDoc,updateDoc,deleteDoc,writeBatch,runTransaction,serverTimestamp,Timestamp} from 'firebase/firestore';
+import {doc,collection,getDoc,getDocs,setDoc,updateDoc,deleteDoc,writeBatch,runTransaction,serverTimestamp,Timestamp,onSnapshot} from 'firebase/firestore';
 if(!process.env.FIRESTORE_EMULATOR_HOST)throw Error('Emulator required');
 let env;const db=(uid='admin')=>env.authenticatedContext(uid,{email:`${uid}@example.test`,email_verified:true,firebase:{sign_in_provider:'google.com'}}).firestore();
 const ref=(d,path)=>doc(d,`groups/g/${path}`);const now=serverTimestamp;
@@ -111,4 +111,58 @@ test('initial song creation supports two arrangements and four presets; larger i
  const vocalKeys=Array.from({length:4},(_,i)=>({vocalistName:`Vocalist ${i}`,key:'Bb minor'}));
  await assertSucceeds(writeSong({...song('song',[arrangement('a'),arrangement('b')]),vocalistKeys:vocalKeys}));
  await assertFails(writeSong(song('other',[arrangement('c'),arrangement('d'),arrangement('e')])));
+});
+
+function firstSnapshot(reference) {
+ return new Promise((resolve,reject)=>{
+  let stop=()=>{};
+  const timer=setTimeout(()=>{stop();reject(Error('Listener timed out'));},8000);
+  stop=onSnapshot(reference,snapshot=>{clearTimeout(timer);stop();resolve(snapshot);},error=>{clearTimeout(timer);stop();reject(error);});
+ });
+}
+for(const role of ['admin','leader','trainee']) {
+ test(`${role}: group collection listeners, details and scoped mutation matrix`,async()=>{
+  await writeSong(song('song',[arrangement(),arrangement('unused')]));await writeSetlist('viewable',[item()],true);
+  const d=db(role);
+  assert.equal((await firstSnapshot(collection(d,'groups/g/songs'))).size,1);
+  assert.equal((await firstSnapshot(collection(d,'groups/g/setlists'))).size,1);
+  assert.equal((await getDoc(ref(d,'songs/song'))).data().arrangements.a.chordProSource,source);
+  assert.equal((await getDoc(ref(d,'setlists/viewable'))).data().publishedItems[0].songId,'song');
+  assert.equal((await getDoc(ref(d,'catalog/a'))).data().songId,'song');
+  await assertFails(getDocs(collection(d,'groups/other/songs')));
+  await assertFails(getDocs(collection(d,'groups/other/setlists')));
+  const extra=song('managed',[arrangement('managed-a')]);
+  if(role==='trainee') {
+   await assertFails(writeSong(extra,'managed',role));
+   await assertFails(writeSong({...song(),title:'Denied'},'song',role));
+   await assertFails(writeSong(song('song',[arrangement(),arrangement('forged')]),'song',role));
+   await assertFails(writeSong(song('song',[arrangement()]),'song',role));
+   await assertFails(writeSetlist('new-service',[],false,role));
+   await assertFails(writeSetlist('viewable',[item()],true,role));
+   await assertFails(writeSetlist('viewable',[],false,role,true));
+   await writeSong(extra);
+   await assertFails(writeSong(null,'managed',role));
+  } else {
+   await assertSucceeds(writeSong(extra,'managed',role));
+   await assertSucceeds(writeSong({...extra,title:'Edited'},'managed',role));
+   await assertSucceeds(writeSong(song('managed',[arrangement('managed-a'),arrangement('managed-copy')]),'managed',role));
+   await assertSucceeds(writeSong(song('managed',[arrangement('managed-a')]),'managed',role));
+   await assertSucceeds(writeSetlist('managed-service',[item('managed','managed-a')],false,role));
+   await assertSucceeds(writeSetlist('managed-service',[item('managed','managed-a')],true,role));
+   await assertFails(writeSong(null,'managed',role)); // Reference guard still applies to managers.
+   await assertSucceeds(writeSetlist('managed-service',[],false,role,true));
+   await assertSucceeds(writeSong(null,'managed',role));
+  }
+ });
+}
+test('global admin claims never elevate a trainee; verified membership remains required',async()=>{
+ await writeSong(song());await writeSetlist('viewable',[item()],true);
+ const claims={email:'trainee@example.test',email_verified:true,role:'administrator',firebase:{sign_in_provider:'google.com'}};
+ const d=env.authenticatedContext('trainee',claims).firestore();
+ await assertSucceeds(getDocs(collection(d,'groups/g/songs')));
+ await assertFails(updateDoc(ref(d,'songs/song'),{title:'Escalated',updatedAt:now()}));
+ await assertFails(deleteDoc(ref(d,'setlists/viewable')));
+ for(const bad of [env.unauthenticatedContext().firestore(),env.authenticatedContext('leader',{...claims,email_verified:false}).firestore(),env.authenticatedContext('leader',{...claims,firebase:{sign_in_provider:'password'}}).firestore()]) {
+  await assertFails(getDocs(collection(bad,'groups/g/songs')));await assertFails(getDocs(collection(bad,'groups/g/setlists')));
+ }
 });

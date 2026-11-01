@@ -78,7 +78,13 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
   Future<void> _load() async {
     if (widget.setlistId == 'new') {
       final now = DateTime.now();
-      _serviceDateTime = DateTime(now.year, now.month, now.day + 7, 9, 30);
+
+      final daysUntilSunday = (DateTime.sunday - now.weekday + 7) % 7;
+      final nextSunday = now.add(Duration(days: daysUntilSunday == 0 ? 7 : daysUntilSunday));
+
+      _serviceDateTime = DateTime(nextSunday.year, nextSunday.month, nextSunday.day, 8, 30);
+      _nameController.text =
+      '${DateFormat('MMM d').format(_serviceDateTime!)} - Sunday Service';
       _loaded = true;
       _baseline = _snapshot();
       return;

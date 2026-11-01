@@ -6,6 +6,8 @@ import '../providers/song_providers.dart';
 import '../../../core/models/song.dart';
 import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/error_bubble.dart';
+import '../../../core/utils/error_format.dart';
 
 final _songSearchProvider = StateProvider<String>((ref) => '');
 final _songCategoryProvider = StateProvider<String?>((ref) => null);
@@ -41,6 +43,8 @@ class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
     final theme = Theme.of(context);
     final canEdit = ref.watch(canManageSongsProvider);
     final asyncSongs = ref.watch(groupSongsProvider);
+    final loadError =
+        asyncSongs.hasError ? UserFacingError.from(asyncSongs.error!) : null;
     final songs = ref.watch(songsListProvider);
     final query = ref.watch(_songSearchProvider);
     final category = ref.watch(_songCategoryProvider);
@@ -83,8 +87,11 @@ class _SongLibraryScreenState extends ConsumerState<SongLibraryScreen> {
           body: asyncSongs.isLoading
               ? const Center(child: CircularProgressIndicator())
               : asyncSongs.hasError
-                  ? Center(
-                      child: Text('Could not load songs: ${asyncSongs.error}'))
+                  ? ErrorBubble(
+                      title: loadError!.title,
+                      message: loadError.message,
+                      icon: loadError.icon,
+                      onRetry: () => ref.invalidate(groupSongsProvider))
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                       children: [

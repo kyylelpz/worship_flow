@@ -28,7 +28,7 @@ class ErrorBubble extends StatelessWidget {
           decoration: BoxDecoration(
             color: scheme.errorContainer,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: scheme.error.withOpacity(0.35)),
+            border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,

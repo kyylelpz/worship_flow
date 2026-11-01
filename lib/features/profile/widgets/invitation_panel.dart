@@ -36,8 +36,6 @@ class _InvitationPrivacyToggleState
     return Card(
         child: SwitchListTile(
             title: const Text('Allow Invitations'),
-            subtitle: const Text(
-                'Group Administrators can find your verified Google email and invite you. Turning this off keeps existing requests.'),
             value: ref.watch(currentUserProvider)?.allowInvitations ?? true,
             onChanged: _saving
                 ? null
