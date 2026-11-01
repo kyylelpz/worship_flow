@@ -1,3 +1,4 @@
+import 'package:worship_flow/features/charts/widgets/compact_chord_grid.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:worship_flow/core/models/chart_settings.dart';
@@ -138,7 +139,7 @@ void main() {
     await showChart(tester, source,
         settings:
             const ChartSettings(displayMode: ChartDisplayMode.chordsOnly));
-    expect(find.text('4/4 · 1 slot(s) per denominator beat'), findsOneWidget);
+    expect(find.byType(CompactChordGrid), findsOneWidget);
     expect(find.text('Chord sequence · no timing'), findsNothing);
     expect(find.text('-'), findsNWidgets(2));
     await showChart(tester, source.replaceAll('D - G -', 'D -'),
@@ -160,9 +161,9 @@ void main() {
         scale: 2,
         settings:
             const ChartSettings(displayMode: ChartDisplayMode.chordsOnly));
-    expect(find.text('6/8 · 2 slot(s) per denominator beat'), findsOneWidget);
-    expect(find.text('1.1'), findsOneWidget);
-    expect(find.text('6.2'), findsOneWidget);
+    expect(find.byType(CompactChordGrid), findsOneWidget);
+    expect(find.text('1.1'), findsNothing);
+    expect(find.text('6.2'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

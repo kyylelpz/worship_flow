@@ -207,9 +207,9 @@ void main() {
     expect(find.byType(ChordChartView), findsOneWidget);
     expect(
         tester
-            .widget<TextField>(find.byKey(const ValueKey('preview-key')))
-            .controller!
-            .text,
+            .widget<DropdownButtonFormField<String>>(
+                find.byKey(const ValueKey('preview-key')))
+            .initialValue,
         'E');
     expect(
         tester
@@ -243,8 +243,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Choose a preview performance key'),
         findsOneWidget);
-    await tester.enterText(find.byKey(const ValueKey('preview-key')), 'Bb');
-    await tester.tap(find.byTooltip('Apply preview key'));
+    await tester.tap(find.byKey(const ValueKey('preview-key')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Bb').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Bb').last);
     await tester.pumpAndSettle();
     expect(
         tester
@@ -392,7 +395,7 @@ void main() {
     await tester.pumpAndSettle();
     final chart = tester.widget<ChordChartView>(find.byType(ChordChartView));
     expect(chart.settings.displayMode, ChartDisplayMode.chordsOnly);
-    expect(chart.settings.useNashville, isTrue);
+    expect(chart.settings.useNashville, isFalse);
     expect(chart.settings.chordsFontSize, 28);
     final scroll = tester
         .widget<SingleChildScrollView>(

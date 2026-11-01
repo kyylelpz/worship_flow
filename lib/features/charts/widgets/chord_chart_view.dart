@@ -7,6 +7,7 @@ import '../../../core/models/chart_settings.dart';
 import '../models/chart_document.dart';
 import 'anchored_lyric_line.dart';
 import 'chord_label.dart';
+import 'compact_chord_grid.dart';
 
 /// Navigation-independent shared chart surface for Rehearsal.
 class ChordChartView extends StatefulWidget {
@@ -14,10 +15,12 @@ class ChordChartView extends StatefulWidget {
       {super.key,
       required this.chart,
       required this.settings,
-      this.showSections = true});
+      this.showSections = true,
+      this.reserveSectionSpace = true});
   final DisplayChart chart;
   final ChartSettings settings;
   final bool showSections;
+  final bool reserveSectionSpace;
 
   @override
   State<ChordChartView> createState() => _ChordChartViewState();
@@ -114,6 +117,7 @@ class _ChordChartViewState extends State<ChordChartView> {
             s.lines.any((l) =>
                 l.chords.isNotEmpty ||
                 (l.lyrics?.trim().isNotEmpty ?? false) ||
+                _repeatText(l) ||
                 (l.original.kind == ChartLineKind.tablature &&
                     l.original.text.trim().isNotEmpty) ||
                 l.original.directive?.kind == DirectiveKind.comment ||
@@ -127,133 +131,70 @@ class _ChordChartViewState extends State<ChordChartView> {
     for (final section in sections) {
       _anchors.putIfAbsent(section.id, () => GlobalKey());
     }
-    Widget instrumental(DisplayChartLine line) {
-      final parts = <Widget>[];
-      var cursor = 0;
-      final raw = line.original.source;
-      void markers(String text) {
-        if (text.isNotEmpty) {
-          parts.add(
-              Text(text, style: chordStyle.copyWith(fontFamily: 'monospace')));
+    Widget sequence(Iterable<DisplayChartLine> lines) =>
+        CompactChordGrid(style: chordStyle, rows: [
+          for (final line in lines)
+            if (line.layout != null)
+              instrumentalGridRow(line)
+            else if (line.chords.isNotEmpty)
+              CompactGridRow(
+                  [CompactMeasure(line.chords.map((c) => c.text).toList())])
+            else if (_repeatText(line))
+              CompactGridRow(const [], text: line.original.text)
+            else if (line.original.kind == ChartLineKind.blank)
+              const CompactGridRow([], text: ''),
+        ]);
+    Widget gridView(DisplayTimingGrid grid) =>
+        CompactChordGrid(rows: timingGridRows(grid), style: chordStyle);
+    List<Widget> lyricLines(List<DisplayChartLine> lines) {
+      final result = <Widget>[];
+      var passage = <DisplayChartLine>[];
+      void flush() {
+        if (passage.isEmpty) return;
+        result.add(sequence(passage));
+        passage = [];
+      }
+
+      for (final line in lines) {
+        if (line.layout != null ||
+            (passage.isNotEmpty &&
+                (_repeatText(line) ||
+                    line.original.kind == ChartLineKind.blank))) {
+          passage.add(line);
+          continue;
+        }
+        flush();
+        if (line.original.kind == ChartLineKind.blank) {
+          result.add(SizedBox(
+              height:
+                  MediaQuery.textScalerOf(context).scale(lyricStyle.fontSize!) *
+                      settings.lineSpacing));
+        } else if (line.lyrics != null && line.lyrics!.isNotEmpty) {
+          result.add(Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: line.chords.isEmpty
+                  ? Text(line.lyrics!, style: lyricStyle)
+                  : AnchoredLyricLine(
+                      line: line,
+                      lyricStyle: lyricStyle,
+                      chordStyle: chordStyle)));
+        } else if (line.chords.isNotEmpty) {
+          result.add(sequence([line]));
+        } else if (line.original.kind == ChartLineKind.tablature) {
+          result.add(Text(line.original.text,
+              style: lyricStyle.copyWith(fontFamily: 'monospace')));
+        } else if (line.original.directive?.kind == DirectiveKind.comment) {
+          result.add(Text(line.original.directive!.value,
+              style: theme.textTheme.bodyMedium));
+        } else if (line.original.directive?.kind == DirectiveKind.unknown) {
+          result.add(
+              Text(line.original.source, style: theme.textTheme.bodySmall));
         }
       }
-
-      for (var i = 0; i < line.chords.length; i++) {
-        final original = line.original.chords[i];
-        final start = original.sourceOffset;
-        markers(raw.substring(cursor, start));
-        parts.add(ChordLabel(line.chords[i].text, style: chordStyle));
-        final token =
-            RegExp(r'^\[[^\[\]]+\]|^[^\s|:]+').firstMatch(raw.substring(start));
-        cursor = start + token!.end;
-      }
-      markers(raw.substring(cursor));
-      return Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          runSpacing: 12,
-          children: parts);
+      flush();
+      return result;
     }
 
-    Widget sequence(Iterable<DisplayChartLine> lines) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final line in lines)
-              if (line.original.kind == ChartLineKind.blank)
-                SizedBox(
-                    height: MediaQuery.textScalerOf(context)
-                            .scale(lyricStyle.fontSize!) *
-                        settings.lineSpacing)
-              else if (line.layout != null)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: instrumental(line))
-              else if (line.chords.isNotEmpty)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Wrap(spacing: 18, runSpacing: 12, children: [
-                      for (final chord in line.chords)
-                        ChordLabel(chord.text, style: chordStyle),
-                    ])),
-          ],
-        );
-    Widget gridView(DisplayTimingGrid grid) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-                '${grid.original.meter} · ${grid.original.subdivision} slot(s) per denominator beat',
-                style: theme.textTheme.bodySmall),
-            LayoutBuilder(
-                builder: (context, constraints) => Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (var m = 0; m < grid.measures.length; m++)
-                          ConstrainedBox(
-                            constraints:
-                                BoxConstraints(maxWidth: constraints.maxWidth),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                  border: Border.all(color: theme.dividerColor),
-                                  borderRadius: BorderRadius.circular(6)),
-                              child: Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                            '${grid.original.measures[m].openingBar} ${m + 1} ${grid.original.measures[m].closingBar}',
-                                            style: theme.textTheme.labelSmall),
-                                        LayoutBuilder(
-                                            builder: (context, slotsBox) {
-                                          final desired =
-                                              MediaQuery.textScalerOf(context)
-                                                  .scale(
-                                                      settings.chordsFontSize *
-                                                          settings.globalScale *
-                                                          3.5);
-                                          final columns = (slotsBox.maxWidth /
-                                                  desired)
-                                              .floor()
-                                              .clamp(
-                                                  1, grid.measures[m].length);
-                                          final cellWidth =
-                                              slotsBox.maxWidth / columns;
-                                          return Wrap(runSpacing: 8, children: [
-                                            for (final slot in grid.measures[m])
-                                              SizedBox(
-                                                  width: cellWidth,
-                                                  child: Padding(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 3),
-                                                      child: Column(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            Text(
-                                                                '${slot.original.index ~/ grid.original.subdivision + 1}'
-                                                                '${grid.original.subdivision == 1 ? '' : '.${slot.original.index % grid.original.subdivision + 1}'}',
-                                                                style: theme
-                                                                    .textTheme
-                                                                    .labelSmall),
-                                                            ChordLabel(
-                                                                slot.text,
-                                                                style:
-                                                                    chordStyle,
-                                                                textAlign:
-                                                                    TextAlign
-                                                                        .center),
-                                                          ]))),
-                                          ]);
-                                        }),
-                                      ])),
-                            ),
-                          ),
-                      ],
-                    )),
-          ],
-        );
     Widget sectionView(DisplayChartSection section) {
       final grids = chart.grids
           .where((g) =>
@@ -266,19 +207,35 @@ class _ChordChartViewState extends State<ChordChartView> {
           chart.document.grids.any((g) => g.sectionId == section.id);
       return Padding(
         key: _anchors[section.id],
-        padding: const EdgeInsets.only(bottom: 28),
+        padding: const EdgeInsets.only(bottom: 18),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(section.label,
               style: theme.textTheme.titleMedium?.copyWith(
                   fontSize:
                       settings.sectionHeaderFontSize * settings.globalScale)),
-          const SizedBox(height: 12),
-          if (settings.displayMode == ChartDisplayMode.chordsOnly &&
-              usableGrids.isNotEmpty)
-            for (final grid in usableGrids) gridView(grid)
-          else if (settings.displayMode == ChartDisplayMode.chordsOnly) ...[
-            if (section.lines.any((l) => l.chords.isNotEmpty))
+          const SizedBox(height: 6),
+          if (usableGrids.isNotEmpty &&
+              settings.displayMode != ChartDisplayMode.lyricsOnly &&
+              (settings.displayMode == ChartDisplayMode.chordsOnly ||
+                  !section.lines.any((l) =>
+                      l.original.kind == ChartLineKind.lyrics &&
+                      l.original.text.trim().isNotEmpty &&
+                      !_repeatText(l)))) ...[
+            for (final grid in usableGrids) ...[
+              gridView(grid),
+              if (grid.original.sectionId != section.id)
+                for (final line in chart.sections
+                    .where((s) => s.id == grid.original.sectionId)
+                    .expand((s) => s.lines)
+                    .where(_repeatText))
+                  Text(line.original.text, style: lyricStyle),
+            ],
+            for (final line in section.lines.where(_repeatText))
+              Text(line.original.text, style: lyricStyle),
+          ] else if (settings.displayMode == ChartDisplayMode.chordsOnly) ...[
+            if (section.lines
+                .any((l) => l.chords.isNotEmpty && l.layout == null))
               Text('Chord sequence · no timing',
                   style: theme.textTheme.bodySmall),
             sequence(section.lines),
@@ -294,34 +251,7 @@ class _ChordChartViewState extends State<ChordChartView> {
             ],
           ] else if (!timingSection ||
               settings.displayMode != ChartDisplayMode.lyricsOnly)
-            for (final line in section.lines) ...[
-              if (line.original.kind == ChartLineKind.blank)
-                SizedBox(
-                    height: MediaQuery.textScalerOf(context)
-                            .scale(lyricStyle.fontSize!) *
-                        settings.lineSpacing)
-              else if (line.lyrics != null && line.lyrics!.isNotEmpty)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: line.chords.isEmpty
-                        ? Text(line.lyrics!, style: lyricStyle)
-                        : AnchoredLyricLine(
-                            line: line,
-                            lyricStyle: lyricStyle,
-                            chordStyle: chordStyle))
-              else if (line.layout != null || line.chords.isNotEmpty)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: sequence([line]))
-              else if (line.original.kind == ChartLineKind.tablature)
-                Text(line.original.text,
-                    style: lyricStyle.copyWith(fontFamily: 'monospace'))
-              else if (line.original.directive?.kind == DirectiveKind.comment)
-                Text(line.original.directive!.value,
-                    style: theme.textTheme.bodyMedium)
-              else if (line.original.directive?.kind == DirectiveKind.unknown)
-                Text(line.original.source, style: theme.textTheme.bodySmall),
-            ],
+            ...lyricLines(section.lines),
         ]),
       );
     }
@@ -350,7 +280,8 @@ class _ChordChartViewState extends State<ChordChartView> {
                 key: const ValueKey('chart-scroll'),
                 controller: _scroll,
                 // Keep this gutter even when hidden: toggling never reflows lyrics.
-                padding: EdgeInsets.fromLTRB(12, 12, bubbleWidth + 20, 12),
+                padding: EdgeInsets.fromLTRB(12, 12,
+                    widget.reserveSectionSpace ? bubbleWidth + 20 : 12, 12),
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
@@ -490,3 +421,7 @@ List<String> _sectionLabels(List<DisplayChartSection> sections) {
     return label;
   }).toList();
 }
+
+bool _repeatText(DisplayChartLine line) =>
+    RegExp(r'^\s*\(\s*\d+\s*x\s*\)\s*$', caseSensitive: false)
+        .hasMatch(line.original.text);

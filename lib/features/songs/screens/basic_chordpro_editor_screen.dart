@@ -7,6 +7,7 @@ import '../../../core/models/song.dart';
 import '../../../core/models/vocalist_key.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../charts/data/chart_transformer.dart';
+import '../../charts/data/chordpro_parser.dart';
 import '../../charts/models/chart_document.dart';
 import '../../charts/models/chord_symbol.dart';
 import '../../charts/widgets/chord_chart_view.dart';
@@ -48,19 +49,58 @@ class ChordProEditorScreen extends ConsumerStatefulWidget {
 
 class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
   late final _source = ChordProEditingController(text: widget.source);
-  late final _key = TextEditingController(
-      text: widget.previewKey ??
-          widget.vocalistKeys
-              .where((v) => MusicalKey.tryParse(v.key) != null)
-              .firstOrNull
-              ?.key ??
-          '');
+  String? _previewKey;
+  bool _keyInitialized = false, _minorKey = false;
+  ChartDisplayMode? _displayMode;
+  static const _keyValues = [
+    'C',
+    'Db',
+    'D',
+    'Eb',
+    'E',
+    'F',
+    'F#',
+    'G',
+    'Ab',
+    'A',
+    'Bb',
+    'B'
+  ];
+  static const _minorKeyValues = [
+    'C',
+    'C#',
+    'D',
+    'Eb',
+    'E',
+    'F',
+    'F#',
+    'G',
+    'G#',
+    'A',
+    'Bb',
+    'B'
+  ];
+  List<String> get _selectableKeys => _minorKey ? _minorKeyValues : _keyValues;
+  static const _keyLabels = [
+    'C',
+    'C#/Db',
+    'D',
+    'Eb',
+    'E',
+    'F',
+    'F#/Gb',
+    'G',
+    'Ab',
+    'A',
+    'Bb',
+    'B'
+  ];
   late final _group = ref.read(selectedGroupIdProvider);
   final _focus = FocusNode();
   final _scroll = ScrollController();
   bool _preview = false, _allowExit = false, _confirming = false;
   bool _restoreFocus = false;
-  bool? _nashville;
+  bool _nashville = false;
   double _editorOffset = 0;
   ChartDocument? _document;
   String? _previewError, _parsedSource, _parsedKey;
@@ -72,7 +112,6 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
   @override
   void dispose() {
     _source.dispose();
-    _key.dispose();
     _focus.dispose();
     _scroll.dispose();
     super.dispose();
@@ -121,12 +160,27 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
   }
 
   void _parsePreview() {
-    if (_parsedSource == _source.text && _parsedKey == _key.text) return;
+    if (!_keyInitialized) {
+      final initial = MusicalKey.tryParse(widget.previewKey ?? '') ??
+          const ChordProParser().parse(_source.text).key ??
+          widget.vocalistKeys
+              .map((p) => MusicalKey.tryParse(p.key))
+              .whereType<MusicalKey>()
+              .firstOrNull;
+      _minorKey = initial?.isMinor ?? false;
+      _previewKey = initial == null
+          ? null
+          : '${_selectableKeys[initial.tonic.pitch]}${_minorKey ? 'm' : ''}';
+      _keyInitialized = true;
+    }
+    if (_parsedSource == _source.text && _parsedKey == (_previewKey ?? '')) {
+      return;
+    }
     _parsedSource = _source.text;
-    _parsedKey = _key.text;
+    _parsedKey = (_previewKey ?? '');
     _document = null;
     _previewError = null;
-    if (MusicalKey.tryParse(_key.text) == null) {
+    if (MusicalKey.tryParse((_previewKey ?? '')) == null) {
       _previewError =
           'Choose a preview performance key, such as E or F#m. Source {key:} is not required for numbered chords.';
       return;
@@ -149,7 +203,7 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
           .prepare(
               song: song,
               arrangement: arrangement,
-              previewKey: _key.text,
+              previewKey: (_previewKey ?? ''),
               settings: const ChartSettings())
           .document;
     } on ArgumentError catch (error) {
@@ -162,6 +216,10 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
       _editorOffset = _scroll.hasClients ? _scroll.offset : 0;
       _restoreFocus = _focus.hasFocus;
       _focus.unfocus();
+      _displayMode ??= ref.read(chartSettingsProvider).displayMode ==
+              ChartDisplayMode.lyricsOnly
+          ? ChartDisplayMode.lyricsAndChords
+          : ref.read(chartSettingsProvider).displayMode;
       _parsePreview();
     }
     setState(() => _preview = !_preview);
@@ -218,58 +276,147 @@ class _ChordProEditorScreenState extends ConsumerState<ChordProEditorScreen> {
               ]))));
 
   Widget _previewPane(ChartSettings settings) {
-    final effective =
-        settings.copyWith(useNashville: _nashville ?? settings.useNashville);
-    return Column(children: [
-      SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(children: [
-            SizedBox(
-                width: 160,
-                child: TextField(
-                    key: const ValueKey('preview-key'),
-                    controller: _key,
-                    decoration: const InputDecoration(labelText: 'Preview key'),
-                    onSubmitted: (_) => setState(_parsePreview))),
-            IconButton(
-                tooltip: 'Apply preview key',
-                onPressed: () {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  setState(_parsePreview);
-                },
-                icon: const Icon(Icons.check)),
-            for (final preset in widget.vocalistKeys
-                .where((v) => MusicalKey.tryParse(v.key) != null))
-              Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ActionChip(
-                      label: Text('${preset.vocalistName} · ${preset.key}'),
-                      onPressed: () {
-                        _key.text = preset.key;
-                        setState(_parsePreview);
-                      })),
-            ChoiceChip(
-                label: const Text('Standard'),
-                selected: !effective.useNashville,
-                onSelected: (_) => setState(() => _nashville = false)),
-            const SizedBox(width: 8),
-            ChoiceChip(
-                label: const Text('Nashville'),
-                selected: effective.useNashville,
-                onSelected: (_) => setState(() => _nashville = true)),
-          ])),
-      Expanded(
-          child: _document == null
-              ? SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Text(_previewError ??
-                      'Open Preview to render the current draft.'))
-              : ChordChartView(
-                  chart:
-                      const ChartTransformer().display(_document!, effective),
-                  settings: effective)),
-    ]);
+    final effective = settings.copyWith(
+        useNashville: _nashville,
+        displayMode: _displayMode ??
+            (settings.displayMode == ChartDisplayMode.lyricsOnly
+                ? ChartDisplayMode.lyricsAndChords
+                : settings.displayMode));
+    double controlWidth(Iterable<String> labels) {
+      final font = Theme.of(context).textTheme.labelLarge ??
+          const TextStyle(fontSize: 14);
+      var width = 0.0;
+      for (final text in labels) {
+        final painter = TextPainter(
+            text: TextSpan(text: text, style: font),
+            textDirection: TextDirection.ltr,
+            textScaler: MediaQuery.textScalerOf(context))
+          ..layout();
+        width += painter.width + 36;
+        painter.dispose();
+      }
+      return width;
+    }
+
+    Widget options<T>(String label, Map<T, String> values, T selected,
+            ValueChanged<T> select) =>
+        LayoutBuilder(builder: (context, box) {
+          final width = controlWidth(values.values);
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 4),
+                if (width <= box.maxWidth)
+                  SegmentedButton<T>(
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact),
+                      segments: [
+                        for (final entry in values.entries)
+                          ButtonSegment(
+                              value: entry.key, label: Text(entry.value))
+                      ],
+                      selected: {selected},
+                      onSelectionChanged: (value) => select(value.single))
+                else
+                  Wrap(spacing: 4, runSpacing: 4, children: [
+                    for (final entry in values.entries)
+                      ChoiceChip(
+                          label: Text(entry.value),
+                          selected: entry.key == selected,
+                          showCheckmark: false,
+                          onSelected: (_) => select(entry.key)),
+                  ]),
+              ]);
+        });
+    return LayoutBuilder(
+        builder: (context, viewport) => Column(children: [
+              ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxHeight: viewport.maxHeight * .48),
+                  child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            DropdownButtonFormField<String>(
+                                key: const ValueKey('preview-key'),
+                                initialValue: _previewKey,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                    labelText: 'Preview key', isDense: true),
+                                hint: const Text('Choose key'),
+                                items: [
+                                  for (var i = 0; i < _keyValues.length; i++)
+                                    DropdownMenuItem(
+                                        value:
+                                            '${_selectableKeys[i]}${_minorKey ? 'm' : ''}',
+                                        child: Text(_minorKey
+                                            ? _keyLabels[i]
+                                                .split('/')
+                                                .map((k) => '${k}m')
+                                                .join('/')
+                                            : _keyLabels[i]))
+                                ],
+                                onChanged: (value) => setState(() {
+                                      _previewKey = value;
+                                      _parsePreview();
+                                    })),
+                            const SizedBox(height: 8),
+                            LayoutBuilder(builder: (context, box) {
+                              final modeWidth = controlWidth(
+                                      const ['Lyrics + Chords', 'Chords Only'])
+                                  .clamp(0.0, box.maxWidth)
+                                  .toDouble();
+                              final notationWidth =
+                                  controlWidth(const ['Standard', 'Nashville'])
+                                      .clamp(0.0, box.maxWidth)
+                                      .toDouble();
+                              return Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  children: [
+                                    SizedBox(
+                                        width: modeWidth,
+                                        child: options<ChartDisplayMode>(
+                                            'Display mode',
+                                            const {
+                                              ChartDisplayMode.lyricsAndChords:
+                                                  'Lyrics + Chords',
+                                              ChartDisplayMode.chordsOnly:
+                                                  'Chords Only'
+                                            },
+                                            effective.displayMode,
+                                            (mode) => setState(
+                                                () => _displayMode = mode))),
+                                    SizedBox(
+                                        width: notationWidth,
+                                        child: options<bool>(
+                                            'Notation',
+                                            const {
+                                              false: 'Standard',
+                                              true: 'Nashville'
+                                            },
+                                            _nashville,
+                                            (value) => setState(
+                                                () => _nashville = value))),
+                                  ]);
+                            }),
+                          ]))),
+              Expanded(
+                  child: _document == null
+                      ? SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(_previewError ??
+                              'Open Preview to render the current draft.'))
+                      : ChordChartView(
+                          chart: const ChartTransformer()
+                              .display(_document!, effective),
+                          settings: effective,
+                          showSections: false,
+                          reserveSectionSpace: false)),
+            ]));
   }
 
   @override

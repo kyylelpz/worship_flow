@@ -146,8 +146,10 @@ void main() {
           expect(find.byType(ChordLabel), findsNothing);
           expect(find.text('well-being'), findsOneWidget);
         } else {
-          expect(find.text(' - - - |: '), findsOneWidget);
-          expect(find.text('  - - - :| %'), findsOneWidget);
+          expect(find.text('|:'), findsWidgets);
+          expect(find.text(':|'), findsWidgets);
+          expect(find.text('%'), findsOneWidget);
+          expect(find.text('-'), findsNWidgets(6));
           expect(find.text('7'), findsOneWidget);
           expect(
               find.byWidgetPredicate((w) =>
