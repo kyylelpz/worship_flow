@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Drift stores protected charts and last-known access in app documents.
+         Rebuild this read cache from authorized server reads, never a backup. -->
+    <exclude domain="root" path="app_flutter/" />
+</full-backup-content>

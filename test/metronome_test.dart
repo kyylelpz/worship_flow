@@ -41,6 +41,39 @@ class FakeAudio implements MetronomeAudio {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('late old-route disposal never releases the new audio owner', () async {
+    final audio = FakeAudio();
+    final old = RehearsalMetronome(audio);
+    await old.start(const MetronomePattern(90, 4));
+    final next = RehearsalMetronome(audio);
+    await next.start(const MetronomePattern(110, 3));
+    old.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(old.value, false);
+    expect(audio.playing, 1);
+    next.dispose();
+    await Future<void>.delayed(Duration.zero);
+    expect(audio.playing, 0);
+  });
+  test('departing rehearsal cleanup cannot stop a new rehearsal start',
+      () async {
+    final audio = FakeAudio()..preparation = Completer<void>();
+    final old = RehearsalMetronome(audio);
+    final pending = old.start(const MetronomePattern(90, 4));
+    await Future<void>.delayed(Duration.zero);
+    final initialization = audio.preparation!;
+    old.dispose();
+    audio.preparation = null;
+    final next = RehearsalMetronome(audio);
+    final nextStart = next.start(const MetronomePattern(110, 3));
+    await Future<void>.delayed(Duration.zero);
+    initialization.complete();
+    await Future.wait([pending, nextStart]);
+    await Future<void>.delayed(Duration.zero);
+    expect(audio.playing, 1);
+    expect(next.value, true);
+    next.dispose();
+  });
   test(
       'native audio receives bundled distinct ticks and bar lengths; pause precedes release',
       () async {

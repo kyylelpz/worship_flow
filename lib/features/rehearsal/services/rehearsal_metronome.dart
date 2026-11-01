@@ -77,11 +77,18 @@ class NativeMetronomeAudio implements MetronomeAudio {
 class RehearsalMetronome extends ValueNotifier<bool> {
   RehearsalMetronome(this.audio) : super(false);
   final MetronomeAudio audio;
-  Future<void> _pending = Future.value();
+  // Routes can overlap while native initialization is pending. The shared audio
+  // engine needs one operation queue across both departing and arriving views.
+  static final _queues = Expando<_AudioOperations>();
+  late final _operations = _queues[audio] ??= _AudioOperations();
+  Future<void> get _pending => _operations.pending;
+  set _pending(Future<void> value) => _operations.pending = value;
   int _generation = 0;
   bool _disposed = false;
 
   Future<void> start(MetronomePattern pattern) {
+    if (_operations.owner != this) _operations.owner?.stop();
+    _operations.owner = this;
     final generation = ++_generation;
     value = true;
     final result = _pending.then((_) async {
@@ -105,6 +112,9 @@ class RehearsalMetronome extends ValueNotifier<bool> {
   void stop() {
     ++_generation;
     if (!_disposed) value = false;
+    // Disposal of an old route may finish after the new route has started.
+    if (_operations.owner != this) return;
+    _operations.owner = null;
     _pending = _pending
         .then((_) => audio.stop())
         .catchError((Object error, StackTrace stack) {
@@ -118,4 +128,9 @@ class RehearsalMetronome extends ValueNotifier<bool> {
     _disposed = true;
     super.dispose();
   }
+}
+
+class _AudioOperations {
+  Future<void> pending = Future.value();
+  RehearsalMetronome? owner;
 }
