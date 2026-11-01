@@ -1,3 +1,4 @@
+import '../../../core/cache/cache_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/group_member.dart';
@@ -17,7 +18,8 @@ final groupRepositoryProvider = Provider<GroupRepository>((ref) {
     return repo;
   }
   return FirestoreGroupRepository(
-      ref.watch(firestoreProvider), ref.watch(firebaseAuthProvider));
+      ref.watch(firestoreProvider), ref.watch(firebaseAuthProvider),
+      cache: ref.watch(localContentCacheProvider));
 });
 
 /// All groups the current user belongs to.

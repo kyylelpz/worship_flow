@@ -1,3 +1,4 @@
+import '../../../core/cache/cache_providers.dart';
 import '../../groups/providers/group_providers.dart';
 import '../../groups/data/firestore_group_repository.dart';
 import '../../../core/firebase/firebase_providers.dart';
@@ -17,7 +18,8 @@ final setlistRepositoryProvider = Provider<SetlistRepository>((ref) {
     return FirestoreSetlistRepository(
         ref.watch(firestoreProvider),
         ref.watch(firebaseAuthProvider),
-        () => ref.read(selectedGroupIdProvider));
+        () => ref.read(selectedGroupIdProvider),
+        cache: ref.watch(localContentCacheProvider));
   }
   final repo = MockSetlistRepository(
       validateItems: ref.watch(songCatalogProvider).validateReferences);

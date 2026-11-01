@@ -1,3 +1,5 @@
+import '../../../core/cache/content_cache_database.dart';
+import '../../../core/cache/local_content_cache.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
@@ -9,7 +11,8 @@ import 'song_repository.dart';
 import 'song_validation.dart';
 
 class FirestoreSongRepository implements SongRepository {
-  FirestoreSongRepository(this.db, this.auth, this.selectedGroup);
+  FirestoreSongRepository(this.db, this.auth, this.selectedGroup, {this.cache});
+  final LocalContentCache? cache;
   final FirebaseFirestore db;
   final FirebaseAuth auth;
   final String? Function() selectedGroup;
@@ -25,17 +28,38 @@ class FirestoreSongRepository implements SongRepository {
   @override
   Stream<List<Song>> watchSongs(String groupId) {
     _scope(groupId);
-    return db.collection('groups/$groupId/songs').snapshots().map((s) =>
-        s.docs.map((d) => songFromData(d.data())).toList()
-          ..sort((a, b) => a.title.compareTo(b.title)));
+    final uid = auth.currentUser!.uid;
+    final lease = cache?.begin(groupId);
+    return db
+        .collection('groups/$groupId/songs')
+        .snapshots(includeMetadataChanges: true)
+        .asyncMap((snapshot) async {
+      _scope(groupId);
+      if (auth.currentUser?.uid != uid) throw StateError('Account changed.');
+      final songs = snapshot.docs.map((d) => songFromData(d.data())).toList()
+        ..sort((a, b) => a.title.compareTo(b.title));
+      await cache?.collection(lease, CachedKind.songs,
+          [for (final d in snapshot.docs) CachedDocument(d.id, d.data())],
+          fromServer: !snapshot.metadata.isFromCache,
+          pendingWrites: snapshot.metadata.hasPendingWrites);
+      return songs;
+    });
   }
 
   @override
   Future<Song?> getSong(String groupId, String songId) async {
     _scope(groupId);
+    final uid = auth.currentUser!.uid;
+    final lease = cache?.begin(groupId);
     final doc = await _song(groupId, songId)
         .get(const GetOptions(source: Source.server));
-    return doc.exists ? songFromData(doc.data()!) : null;
+    _scope(groupId);
+    if (auth.currentUser?.uid != uid) throw StateError('Account changed.');
+    final song = doc.exists ? songFromData(doc.data()!) : null;
+    await cache?.document(lease, CachedKind.songs, songId, doc.data(),
+        fromServer: !doc.metadata.isFromCache,
+        pendingWrites: doc.metadata.hasPendingWrites);
+    return song;
   }
 
   @override
@@ -181,10 +205,16 @@ class FirestoreSongRepository implements SongRepository {
         return s.copyWith(arrangements: _required(old).arrangements);
       });
   @override
-  Future<void> deleteSong(String g, String id) => _mutate(g, id, (old, _) {
-        _required(old);
-        return null;
-      }, readUses: null);
+  Future<void> deleteSong(String g, String id) async {
+    final lease = cache?.begin(g);
+    await _mutate(g, id, (old, _) {
+      _required(old);
+      return null;
+    }, readUses: null);
+    await cache?.document(lease, CachedKind.songs, id, null,
+        fromServer: true, pendingWrites: false);
+  }
+
   @override
   Future<String> createArrangement(String g, String id, Arrangement a) async {
     final key = const Uuid().v4();

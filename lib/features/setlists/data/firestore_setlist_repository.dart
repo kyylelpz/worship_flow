@@ -1,3 +1,5 @@
+import '../../../core/cache/content_cache_database.dart';
+import '../../../core/cache/local_content_cache.dart';
 import '../../../core/models/edit_conflict.dart';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -11,7 +13,9 @@ import 'setlist_repository.dart';
 
 class FirestoreSetlistRepository
     implements SetlistRepository, AtomicSetlistRepository {
-  FirestoreSetlistRepository(this.db, this.auth, this.selectedGroup);
+  FirestoreSetlistRepository(this.db, this.auth, this.selectedGroup,
+      {this.cache});
+  final LocalContentCache? cache;
   final FirebaseFirestore db;
   final FirebaseAuth auth;
   final String? Function() selectedGroup;
@@ -20,19 +24,43 @@ class FirestoreSetlistRepository
   DocumentReference<Map<String, dynamic>> _ref(String g, String id) =>
       db.doc('groups/$g/setlists/$id');
   @override
-  Stream<List<Setlist>> watchSetlists(String groupId) => db
-      .collection('groups/$groupId/setlists')
-      .snapshots()
-      .map((s) => s.docs.map((d) => setlistFromData(d.data())).toList());
-  @override
-  Future<Setlist?> getSetlist(String setlistId) async {
-    return getInGroup(_group, setlistId);
+  Stream<List<Setlist>> watchSetlists(String groupId) {
+    final uid = auth.currentUser?.uid;
+    final lease = cache?.begin(groupId);
+    return db
+        .collection('groups/$groupId/setlists')
+        .snapshots(includeMetadataChanges: true)
+        .asyncMap((snapshot) async {
+      if (uid == null || auth.currentUser?.uid != uid) {
+        throw StateError('Account changed.');
+      }
+      final setlists =
+          snapshot.docs.map((d) => setlistFromData(d.data())).toList();
+      await cache?.collection(lease, CachedKind.setlists,
+          [for (final d in snapshot.docs) CachedDocument(d.id, d.data())],
+          fromServer: !snapshot.metadata.isFromCache,
+          pendingWrites: snapshot.metadata.hasPendingWrites);
+      return setlists;
+    });
   }
 
+  @override
+  Future<Setlist?> getSetlist(String setlistId) =>
+      getInGroup(_group, setlistId);
+
   Future<Setlist?> getInGroup(String groupId, String setlistId) async {
+    final uid = auth.currentUser?.uid;
+    final lease = cache?.begin(groupId);
     final d = await _ref(groupId, setlistId)
         .get(const GetOptions(source: Source.server));
-    return d.exists ? setlistFromData(d.data()!) : null;
+    if (uid == null || auth.currentUser?.uid != uid) {
+      throw StateError('Account changed.');
+    }
+    final setlist = d.exists ? setlistFromData(d.data()!) : null;
+    await cache?.document(lease, CachedKind.setlists, setlistId, d.data(),
+        fromServer: !d.metadata.isFromCache,
+        pendingWrites: d.metadata.hasPendingWrites);
+    return setlist;
   }
 
   Future<void> _write(String id, String g, Setlist? Function(Setlist?) change,
@@ -188,8 +216,14 @@ class FirestoreSetlistRepository
   }
 
   @override
-  Future<void> delete(String id) => _write(id, _group, (s) {
-        _required(s);
-        return null;
-      });
+  Future<void> delete(String id) async {
+    final group = _group;
+    final lease = cache?.begin(group);
+    await _write(id, group, (s) {
+      _required(s);
+      return null;
+    });
+    await cache?.document(lease, CachedKind.setlists, id, null,
+        fromServer: true, pendingWrites: false);
+  }
 }

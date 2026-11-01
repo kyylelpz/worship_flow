@@ -1,3 +1,4 @@
+import '../../../core/cache/local_content_cache.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -59,7 +60,8 @@ class _GroupSnapshot {
 
 class FirestoreGroupRepository
     implements GroupRepository, GroupCreationRepository {
-  FirestoreGroupRepository(this.firestore, this.auth);
+  FirestoreGroupRepository(this.firestore, this.auth, {this.cache});
+  final LocalContentCache? cache;
   final FirebaseFirestore firestore;
   final FirebaseAuth auth;
   Future<bool> hasMembership(String groupId, String uid) async {
@@ -68,9 +70,11 @@ class FirestoreGroupRepository
       final member = await firestore
           .doc('groups/$groupId/members/$uid')
           .get(const GetOptions(source: Source.server));
-      return member.exists &&
+      final allowed = member.exists &&
           member.data()?['uid'] == uid &&
           member.data()?['groupId'] == groupId;
+      if (!allowed) await cache?.revoke(uid, groupId);
+      return allowed;
     } on FirebaseException catch (e) {
       if (['permission-denied', 'not-found'].contains(e.code)) return false;
       rethrow;
@@ -133,6 +137,9 @@ class FirestoreGroupRepository
             .listen((snapshot) {
           if (cancelled || snapshot.metadata.isFromCache) return;
           final ids = snapshot.docs.map((d) => d.id).toSet();
+          if (!snapshot.metadata.hasPendingWrites) {
+            unawaited(cache?.retainAuthorizedGroups(userId, ids));
+          }
           for (final removed
               in entries.keys.where((id) => !ids.contains(id)).toList()) {
             for (final sub in entries.remove(removed)!.subscriptions) {
@@ -165,6 +172,10 @@ class FirestoreGroupRepository
                     .map((d) => memberFromFirestore(d.data(),
                         expectedUid: d.id, expectedGroupId: id))
                     .toList();
+                if (!members.metadata.hasPendingWrites &&
+                    !entry.members!.any((m) => m.uid == userId)) {
+                  unawaited(cache?.revoke(userId, id));
+                }
                 publish();
               } catch (error) {
                 failure(error);

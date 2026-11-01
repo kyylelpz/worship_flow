@@ -1,3 +1,4 @@
+import '../../../core/cache/cache_providers.dart';
 import '../../groups/data/firestore_group_repository.dart';
 import '../../../core/firebase/firebase_providers.dart';
 import '../data/firestore_song_repository.dart';
@@ -18,7 +19,8 @@ final songRepositoryProvider = Provider<SongRepository>((ref) {
     return FirestoreSongRepository(
         ref.watch(firestoreProvider),
         ref.watch(firebaseAuthProvider),
-        () => ref.read(selectedGroupIdProvider));
+        () => ref.read(selectedGroupIdProvider),
+        cache: ref.watch(localContentCacheProvider));
   }
   final setlists = ref.watch(setlistRepositoryProvider);
   return MockSongRepository(
