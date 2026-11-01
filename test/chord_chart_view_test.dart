@@ -210,7 +210,7 @@ void main() {
     await tester.ensureVisible(find.byTooltip('Transpose up'));
     await tester.tap(find.byTooltip('Transpose up'));
     await tester.pumpAndSettle();
-    expect(find.text('Key Ab · 1/3'), findsOneWidget);
+    expect(find.text('Key of G · 4/4 · Display Ab'), findsOneWidget);
     expect(
         container.read(
             personalTransposeProvider(mockSongs.first.primaryArrangement.id)),
@@ -223,7 +223,7 @@ void main() {
     await rehearsal.openDrawer(tester);
     await tester.tap(find.byKey(const ValueKey('setlist-song-0')));
     await tester.pumpAndSettle();
-    expect(find.text('Key Ab · 1/3'), findsOneWidget);
+    expect(find.text('Key of G · 4/4 · Display Ab'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -5,6 +5,7 @@ import '../../../core/models/song.dart';
 import '../models/chart_document.dart';
 import '../models/chord_symbol.dart';
 import 'chordpro_parser.dart';
+import 'timing_grid_parser.dart';
 
 class ChartTransformer {
   const ChartTransformer();
@@ -123,27 +124,82 @@ class ChartTransformer {
             )));
   }
 
-  /// Preparation API: prefer explicit source {key}, then arrangement key,
-  /// then song default. A mismatched item is rejected instead of substituted.
+  /// Numbers resolve directly in the selected key; letters need a source key.
   DisplayChart prepare(
       {required Song song,
       required Arrangement arrangement,
       SetlistItem? item,
       required ChartSettings settings,
-      int personalSemitones = 0}) {
+      int personalSemitones = 0,
+      String? previewKey,
+      String? sourceKey}) {
     if (!song.arrangements.any((a) => a.id == arrangement.id) ||
         (item != null &&
             (item.songId != song.id || item.arrangementId != arrangement.id))) {
       throw ArgumentError('Song, arrangement and setlist item must match.');
     }
+    final selected = item?.performanceKey ??
+        previewKey ??
+        song.vocalistKeys.firstOrNull?.key;
+    if (selected == null || selected.isEmpty) {
+      throw ArgumentError(
+          'Select a performance/preview key or add a vocal key preset.');
+    }
+    final effective = _key(selected);
     final parsed = const ChordProParser().parse(arrangement.chordProSource,
-        defaultTimeSignature: arrangement.timeSignature);
-    final source = parsed.key?.name ??
-        (arrangement.performanceKey.isNotEmpty
-            ? arrangement.performanceKey
-            : song.defaultKey);
-    final chart = transpose(parsed,
-        sourceKey: source, targetKey: item?.performanceKey ?? source);
+        defaultTimeSignature: arrangement.timeSignature, numberKey: selected);
+    final origin = sourceKey == null ? parsed.key : _key(sourceKey);
+    final hasLetters = parsed.sections
+        .expand((s) => s.lines)
+        .expand((l) => l.chords)
+        .any((c) => c.symbol != null && c.symbol!.rootDegree == null);
+    final priorComparisons =
+        timingGridSequenceWarnings(parsed.sections, parsed.grids).toSet();
+    final warnings =
+        parsed.warnings.where((w) => !priorComparisons.contains(w)).toList();
+    if (hasLetters && origin == null) {
+      warnings.add(
+          'Letter chords have no known source key; retained literally. Add a source {key} for transposition.');
+    }
+    if (hasLetters && origin != null && origin.isMinor != effective.isMinor) {
+      throw ArgumentError(
+          'Transposition cannot change major/minor mode for letter chords.');
+    }
+    AnchoredChord transform(AnchoredChord chord) {
+      final symbol = chord.symbol;
+      if (symbol == null ||
+          symbol.rootDegree != null ||
+          origin == null ||
+          origin.name == effective.name) {
+        return chord;
+      }
+      return chord.withSymbol(symbol.transpose(
+          effective.tonic.pitch - origin.tonic.pitch, effective));
+    }
+
+    final sections = parsed.sections
+        .map((section) => ChartSection(
+            id: section.id,
+            label: section.label,
+            lines: section.lines.map((line) => ChartLine(
+                source: line.source,
+                sourceLine: line.sourceLine,
+                kind: line.kind,
+                text: line.text,
+                directive: line.directive,
+                chords: line.chords.map(transform)))))
+        .toList();
+    final grids = parsed.grids.map((g) => g.mapChords(transform)).toList();
+    final chart = ChartDocument(
+        source: parsed.source,
+        metadata: parsed.metadata,
+        key: effective,
+        sections: sections,
+        grids: grids,
+        warnings: [
+          ...warnings,
+          ...timingGridSequenceWarnings(sections, grids)
+        ]);
     return display(
         personalSemitones == 0
             ? chart

@@ -8,6 +8,7 @@ import '../../../core/models/setlist_item.dart';
 import '../../../core/models/song.dart';
 import '../../../core/models/vocalist_key.dart';
 import '../../groups/data/group_repository.dart';
+import '../../charts/data/chordpro_parser.dart';
 import '../../charts/models/chord_symbol.dart';
 import 'song_repository.dart';
 import 'song_validation.dart';
@@ -43,11 +44,15 @@ class InMemorySongCatalog {
   }
 
   static Song _freeze(Song song) => song.copyWith(
-      arrangements: List.unmodifiable(song.arrangements.map(
-          (a) => a.copyWith(vocalistKeys: List.unmodifiable(a.vocalistKeys)))));
+      arrangements: List.unmodifiable(song.arrangements),
+      vocalistKeys: List.unmodifiable(song.vocalistKeys));
   void validateReferences(String groupId, List<SetlistItem> items) {
     final songs = snapshot(groupId);
     for (final item in items) {
+      if (MusicalKey.tryParse(item.performanceKey) == null) {
+        throw const SongRepositoryException(
+            'Choose a vocalist key for each song before saving.');
+      }
       final song = songs.where((s) => s.id == item.songId).firstOrNull;
       if (song == null ||
           !song.arrangements.any((a) => a.id == item.arrangementId)) {
@@ -103,22 +108,21 @@ class MockSongRepository implements SongRepository {
       song.arrangements.where((a) => a.id == id).firstOrNull ??
       (throw const SongRepositoryException('Arrangement not found.'));
   Arrangement _clean(Arrangement a, {String? id}) => Arrangement(
-          id: id ?? a.id,
-          name: a.name.trim(),
-          performanceKey: a.performanceKey.trim(),
-          bpm: a.bpm,
-          timeSignature: a.timeSignature.trim(),
-          chordProSource: a.chordProSource,
+      id: id ?? a.id,
+      name: a.name.trim(),
+      bpm: a.bpm,
+      timeSignature: a.timeSignature.trim(),
+      chordProSource: a.chordProSource,
+      referenceLink: a.referenceLink.trim());
+  Song _metadata(Song song) => song.copyWith(
+          title: song.title.trim(),
+          artist: song.artist.trim(),
+          category: song.category.trim(),
           vocalistKeys: [
-            for (final v in a.vocalistKeys)
+            for (final v in song.vocalistKeys)
               VocalistKey(
                   vocalistName: v.vocalistName.trim(), key: v.key.trim())
           ]);
-  Song _metadata(Song song) => song.copyWith(
-      title: song.title.trim(),
-      artist: song.artist.trim(),
-      category: song.category.trim(),
-      defaultKey: song.defaultKey.trim());
 
   @override
   Stream<List<Song>> watchSongs(String groupId) => Stream.multi((controller) {
@@ -177,7 +181,7 @@ class MockSongRepository implements SongRepository {
         title: song.title,
         artist: song.artist,
         category: song.category,
-        defaultKey: song.defaultKey,
+        vocalistKeys: song.vocalistKeys,
         isFavorite: song.isFavorite,
         arrangements: [
           for (final a in song.arrangements) _clean(a, id: _uuid.v4())
@@ -227,11 +231,21 @@ class MockSongRepository implements SongRepository {
     final song = _find(groupId, songId);
     final existing = _arrangement(song, arrangement.id);
     SongValidation.arrangement(arrangement);
-    if (MusicalKey.tryParse(existing.performanceKey)?.isMinor !=
-            MusicalKey.tryParse(arrangement.performanceKey)?.isMinor &&
+    final oldKey = const ChordProParser().parse(existing.chordProSource).key;
+    final updatedChart =
+        const ChordProParser().parse(arrangement.chordProSource);
+    final newKey = updatedChart.key;
+    final hasLetters = updatedChart.sections
+        .expand((s) => s.lines)
+        .expand((l) => l.chords)
+        .any((c) => c.symbol != null && c.symbol!.rootDegree == null);
+    if (hasLetters &&
+        oldKey != null &&
+        newKey != null &&
+        oldKey.isMinor != newKey.isMinor &&
         isReferenced(groupId, songId, arrangement.id)) {
       throw const SongRepositoryException(
-          'A referenced arrangement cannot change major/minor mode. Duplicate it for the new mode.');
+          'A referenced letter-source arrangement cannot change major/minor mode. Duplicate it for the new mode.');
     }
     catalog._put(
         groupId,

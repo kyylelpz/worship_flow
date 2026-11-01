@@ -238,7 +238,6 @@ class _SongListTile extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 4,
                       children: [
-                        _Pill(label: 'Key ${song.defaultKey}'),
                         _Pill(label: arr.name),
                         _Pill(label: '${arr.bpm} BPM'),
                         _Pill(label: song.category),

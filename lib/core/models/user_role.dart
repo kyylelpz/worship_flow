@@ -11,5 +11,4 @@ enum UserRole {
       this == UserRole.administrator || this == UserRole.worshipLeader;
   bool get canManageSetlists =>
       this == UserRole.administrator || this == UserRole.worshipLeader;
-  bool get canEnterLiveMode => true;
 }

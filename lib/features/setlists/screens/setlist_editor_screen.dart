@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../songs/providers/song_providers.dart';
-import '../../../core/models/arrangement.dart';
+import '../../../core/router/route_paths.dart';
+import '../../auth/providers/auth_providers.dart';
+import '../../songs/screens/song_editor_screen.dart';
 import '../../../core/models/setlist_item.dart';
 import '../../../core/models/song.dart';
 import '../../../core/theme/app_colors.dart';
@@ -27,6 +29,7 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
   bool _loaded = false;
   bool _saving = false;
   bool _dirty = false;
+  bool _missing = false;
 
   @override
   void initState() {
@@ -37,7 +40,14 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
   Future<void> _load() async {
     final setlist =
         await ref.read(setlistRepositoryProvider).getSetlist(widget.setlistId);
-    if (!mounted || setlist == null) return;
+    if (!mounted) return;
+    if (setlist == null) {
+      setState(() {
+        _missing = true;
+        _loaded = true;
+      });
+      return;
+    }
     setState(() {
       _nameController.text = setlist.name;
       _serviceDateTime = setlist.serviceDateTime;
@@ -120,10 +130,63 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     await ref.read(setlistRepositoryProvider).publish(widget.setlistId);
     ref.invalidate(setlistByIdProvider(widget.setlistId));
     if (!mounted) return;
-    context.pop();
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(RoutePaths.setlists);
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Setlist published.')),
     );
+  }
+
+  Future<void> _managementAction(String action) async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: Text(action == 'delete'
+                    ? 'Delete setlist?'
+                    : 'Duplicate setlist?'),
+                content: Text(action == 'delete'
+                    ? 'This cannot be undone.'
+                    : 'Save current changes and create a draft copy?'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text(action == 'delete' ? 'Delete' : 'Duplicate'))
+                ]));
+    if (confirmed != true || !mounted) return;
+    try {
+      final repo = ref.read(setlistRepositoryProvider);
+      if (action == 'delete') {
+        await repo.delete(widget.setlistId);
+        if (!mounted) return;
+        setState(() => _dirty = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go(RoutePaths.setlists);
+          }
+        });
+      } else {
+        if (_dirty && !await _saveDraft()) return;
+        final id = await repo.duplicate(widget.setlistId);
+        if (mounted) {
+          await context.push(RoutePaths.setlistEditorFor(id));
+        }
+      }
+      ref.invalidate(setlistByIdProvider(widget.setlistId));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
 
   Future<void> _pickDateTime() async {
@@ -161,11 +224,12 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
         _items.add(SetlistItem(
           songId: song.id,
           arrangementId: arr.id,
-          performanceKey: arr.performanceKey,
+          performanceKey: '',
         ));
       }
       _dirty = true;
     });
+    if (selected.length == 1) await _editItem(_items.length - 1);
   }
 
   void _reorder(int oldIndex, int newIndex) {
@@ -230,10 +294,36 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     return result ?? false;
   }
 
+  Future<void> _requestBack() async {
+    if (_saving) return;
+    final ok = await _confirmDiscard();
+    if (!ok || !mounted) return;
+    setState(() => _dirty = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(RoutePaths.setlists);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     ref.watch(groupSongsProvider);
+    if (!(ref.watch(currentRoleProvider)?.canManageSetlists ?? false)) {
+      return Scaffold(
+          appBar: AppBar(),
+          body: const Center(
+              child: Text('Setlist management permission is required.')));
+    }
+    if (_missing) {
+      return Scaffold(
+          appBar: AppBar(),
+          body: const Center(child: Text('Setlist not found.')));
+    }
 
     if (!_loaded) {
       return Scaffold(
@@ -243,16 +333,27 @@ class _SetlistEditorScreenState extends ConsumerState<SetlistEditorScreen> {
     }
 
     return PopScope(
-      canPop: !_dirty,
+      canPop: !_dirty && !_saving && context.canPop(),
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return;
-        final ok = await _confirmDiscard();
-        if (ok && context.mounted) context.pop();
+        if (!didPop) await _requestBack();
       },
       child: Scaffold(
         appBar: AppBar(
+          leading: IconButton(
+              tooltip: 'Back',
+              icon: const Icon(Icons.arrow_back),
+              onPressed: _requestBack),
           title: const Text('Edit Setlist'),
           actions: [
+            PopupMenuButton<String>(
+                tooltip: 'Actions',
+                enabled: !_saving,
+                itemBuilder: (_) => const [
+                      PopupMenuItem(
+                          value: 'duplicate', child: Text('Duplicate')),
+                      PopupMenuItem(value: 'delete', child: Text('Delete'))
+                    ],
+                onSelected: _managementAction),
             TextButton(
               onPressed: _dirty && !_saving ? _saveDraft : null,
               child: _saving
@@ -551,131 +652,111 @@ class _SongPickerSheetState extends ConsumerState<_SongPickerSheet> {
   }
 }
 
-class _ItemConfigSheet extends StatefulWidget {
+class _ItemConfigSheet extends ConsumerStatefulWidget {
   const _ItemConfigSheet({required this.song, required this.item});
-
   final Song song;
   final SetlistItem item;
-
   @override
-  State<_ItemConfigSheet> createState() => _ItemConfigSheetState();
+  ConsumerState<_ItemConfigSheet> createState() => _ItemConfigSheetState();
 }
 
-class _ItemConfigSheetState extends State<_ItemConfigSheet> {
-  late String _arrangementId;
-  late String _key;
+class _ItemConfigSheetState extends ConsumerState<_ItemConfigSheet> {
+  late String _arrangementId = widget.item.arrangementId;
+  late String _key = widget.item.performanceKey;
+  late String? _vocalist = widget.item.vocalistName;
 
-  @override
-  void initState() {
-    super.initState();
-    _arrangementId = widget.item.arrangementId;
-    _key = widget.item.performanceKey;
+  Future<void> _editSong(Song song) async {
+    await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SongEditorScreen(songId: song.id)));
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final arrangement = widget.song.arrangements
-        .where((a) => a.id == _arrangementId)
-        .firstOrNull;
-
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 0,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(widget.song.title, style: theme.textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text(widget.song.artist, style: theme.textTheme.bodySmall),
-          const SizedBox(height: 20),
-          Text('Arrangement', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          RadioGroup<String>(
-            groupValue: _arrangementId,
-            onChanged: (v) {
-              if (v != null) {
-                final selected = widget.song.arrangements.firstWhere(
-                  (a) => a.id == v,
-                );
-                setState(() {
-                  _arrangementId = v;
-                  _key = selected.performanceKey;
-                });
-              }
-            },
+    final song = ref.watch(songByIdProvider(widget.song.id));
+    if (song == null) {
+      return const Padding(
+          padding: EdgeInsets.all(24), child: Text('Song unavailable.'));
+    }
+    final arrangementExists =
+        song.arrangements.any((a) => a.id == _arrangementId);
+    final presetExists = song.vocalistKeys
+        .any((v) => v.vocalistName == _vocalist && v.key == _key);
+    final canEdit = ref.watch(canManageSongsProvider);
+    return SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                20, 0, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
             child: Column(
-              children: [
-                for (final a in widget.song.arrangements)
-                  RadioListTile<String>(
-                    value: a.id,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(a.name),
-                    subtitle: Text('${a.bpm} BPM · ${a.timeSignature}'),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (arrangement != null) ...[
-            Text('Performance Key', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final k in _keyOptions(arrangement))
-                  ChoiceChip(
-                    label: Text(k),
-                    selected: _key == k,
-                    onSelected: (_) => setState(() => _key = k),
-                  ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop(SetlistItem(
-                songId: widget.song.id,
-                arrangementId: _arrangementId,
-                performanceKey: _key,
-              ));
-            },
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<String> _keyOptions(Arrangement arrangement) {
-    // Simple key set — full transposition arrives in Phase 2/3.
-    const keys = [
-      'C',
-      'C#',
-      'D',
-      'Eb',
-      'E',
-      'F',
-      'F#',
-      'G',
-      'Ab',
-      'A',
-      'Bb',
-      'B',
-    ];
-    final presetKeys = arrangement.vocalistKeys.map((v) => v.key).toSet();
-    final ordered = <String>{
-      arrangement.performanceKey,
-      ...presetKeys,
-      ...keys
-    };
-    return ordered.toList();
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(song.title, style: theme.textTheme.titleLarge),
+                  Text('Artist: ${song.artist}',
+                      style: theme.textTheme.bodySmall),
+                  const SizedBox(height: 20),
+                  Text('Arrangement', style: theme.textTheme.titleSmall),
+                  if (!arrangementExists)
+                    const Text(
+                        'Selected arrangement is unavailable. Choose an arrangement.'),
+                  RadioGroup<String>(
+                      groupValue: _arrangementId,
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _arrangementId = value);
+                        }
+                      },
+                      child: Column(children: [
+                        for (final a in song.arrangements)
+                          RadioListTile<String>(
+                              value: a.id,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(a.name),
+                              subtitle:
+                                  Text('${a.bpm} BPM · ${a.timeSignature}'))
+                      ])),
+                  const SizedBox(height: 16),
+                  Text('Performance Key', style: theme.textTheme.titleSmall),
+                  if (!presetExists && _key.isNotEmpty)
+                    Text(
+                        'Stored key: $_key${_vocalist == null ? ' · No vocalist selected' : ' · $_vocalist (preset unavailable or changed)'}'),
+                  if (song.vocalistKeys.isEmpty)
+                    const Text(
+                        'No vocal key presets. Edit Song to add a vocalist and preferred key.'),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final v in song.vocalistKeys)
+                      ChoiceChip(
+                          label: Text('${v.vocalistName} · ${v.key}'),
+                          selected:
+                              _vocalist == v.vocalistName && _key == v.key,
+                          onSelected: (_) => setState(() {
+                                _vocalist = v.vocalistName;
+                                _key = v.key;
+                              }))
+                  ]),
+                  const SizedBox(height: 24),
+                  Row(children: [
+                    if (canEdit)
+                      Expanded(
+                          child: OutlinedButton(
+                              onPressed: () => _editSong(song),
+                              child: const Text('Edit Song'))),
+                    const SizedBox(width: 12),
+                    Expanded(
+                        child: FilledButton(
+                            onPressed: !arrangementExists || _key.isEmpty
+                                ? null
+                                : () {
+                                    Navigator.of(context).pop(SetlistItem(
+                                        songId: song.id,
+                                        arrangementId: _arrangementId,
+                                        performanceKey: _key,
+                                        vocalistName: _vocalist));
+                                  },
+                            child: const Text('Done')))
+                  ]),
+                ])));
   }
 }

@@ -132,31 +132,25 @@ const mockSongs = <Song>[
     title: 'Anchor of the Morning',
     artist: 'Worship Flow Originals',
     category: 'Praise',
-    defaultKey: 'G',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Jordan', key: 'G'),
+      VocalistKey(vocalistName: 'Avery', key: 'A'),
+    ],
     isFavorite: true,
     arrangements: [
       Arrangement(
         id: 'song-1-arr-full',
         name: 'Full Band',
-        performanceKey: 'G',
         bpm: 74,
         timeSignature: '4/4',
         chordProSource: _chordProSongOne,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Jordan', key: 'G'),
-          VocalistKey(vocalistName: 'Avery', key: 'A'),
-        ],
       ),
       Arrangement(
         id: 'song-1-arr-acoustic',
         name: 'Acoustic',
-        performanceKey: 'G',
         bpm: 72,
         timeSignature: '4/4',
         chordProSource: _chordProSongOne,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Jordan', key: 'G'),
-        ],
       ),
     ],
   ),
@@ -165,20 +159,18 @@ const mockSongs = <Song>[
     title: 'Mercy Like a River',
     artist: 'Worship Flow Originals',
     category: 'Worship',
-    defaultKey: 'D',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Jordan', key: 'D'),
+      VocalistKey(vocalistName: 'Noah', key: 'E'),
+    ],
     isFavorite: false,
     arrangements: [
       Arrangement(
         id: 'song-2-arr-full',
         name: 'Full Band',
-        performanceKey: 'D',
         bpm: 68,
         timeSignature: '4/4',
         chordProSource: _chordProSongTwo,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Jordan', key: 'D'),
-          VocalistKey(vocalistName: 'Noah', key: 'E'),
-        ],
       ),
     ],
   ),
@@ -187,19 +179,17 @@ const mockSongs = <Song>[
     title: 'Silent Hallelujah',
     artist: 'Worship Flow Originals',
     category: 'Worship',
-    defaultKey: 'C',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Avery', key: 'C'),
+    ],
     isFavorite: true,
     arrangements: [
       Arrangement(
         id: 'song-3-arr-full',
         name: 'Full Band',
-        performanceKey: 'C',
         bpm: 80,
         timeSignature: '4/4',
         chordProSource: _chordProSongThree,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Avery', key: 'C'),
-        ],
       ),
     ],
   ),
@@ -208,19 +198,17 @@ const mockSongs = <Song>[
     title: 'Bright Horizon',
     artist: 'Worship Flow Originals',
     category: 'Praise',
-    defaultKey: 'A',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Jordan', key: 'A'),
+    ],
     isFavorite: false,
     arrangements: [
       Arrangement(
         id: 'song-4-arr-full',
         name: 'Full Band',
-        performanceKey: 'A',
         bpm: 88,
         timeSignature: '4/4',
         chordProSource: _chordProSongFour,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Jordan', key: 'A'),
-        ],
       ),
     ],
   ),
@@ -229,19 +217,17 @@ const mockSongs = <Song>[
     title: 'Carried Through the Fire',
     artist: 'Worship Flow Originals',
     category: 'Worship',
-    defaultKey: 'Em',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Noah', key: 'Em'),
+    ],
     isFavorite: false,
     arrangements: [
       Arrangement(
         id: 'song-5-arr-full',
         name: 'Full Band',
-        performanceKey: 'Em',
         bpm: 72,
         timeSignature: '4/4',
         chordProSource: _chordProSongFive,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Noah', key: 'Em'),
-        ],
       ),
     ],
   ),
@@ -250,20 +236,18 @@ const mockSongs = <Song>[
     title: 'Open Hands',
     artist: 'Worship Flow Originals',
     category: 'Worship',
-    defaultKey: 'B',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Jordan', key: 'B'),
+      VocalistKey(vocalistName: 'Avery', key: 'C'),
+    ],
     isFavorite: true,
     arrangements: [
       Arrangement(
         id: 'song-6-arr-full',
         name: 'Full Band',
-        performanceKey: 'B',
         bpm: 76,
         timeSignature: '4/4',
         chordProSource: _chordProSongSix,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Jordan', key: 'B'),
-          VocalistKey(vocalistName: 'Avery', key: 'C'),
-        ],
       ),
     ],
   ),
@@ -272,19 +256,17 @@ const mockSongs = <Song>[
     title: 'Faithful in the Waiting',
     artist: 'Worship Flow Originals',
     category: 'Worship',
-    defaultKey: 'F',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Avery', key: 'F'),
+    ],
     isFavorite: false,
     arrangements: [
       Arrangement(
         id: 'song-7-arr-full',
         name: 'Full Band',
-        performanceKey: 'F',
         bpm: 66,
         timeSignature: '4/4',
         chordProSource: _chordProSongSeven,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Avery', key: 'F'),
-        ],
       ),
     ],
   ),
@@ -293,19 +275,17 @@ const mockSongs = <Song>[
     title: 'King of Every Season',
     artist: 'Worship Flow Originals',
     category: 'Praise',
-    defaultKey: 'Ab',
+    vocalistKeys: [
+      VocalistKey(vocalistName: 'Jordan', key: 'Ab'),
+    ],
     isFavorite: false,
     arrangements: [
       Arrangement(
         id: 'song-8-arr-full',
         name: 'Full Band',
-        performanceKey: 'Ab',
         bpm: 84,
         timeSignature: '4/4',
         chordProSource: _chordProSongEight,
-        vocalistKeys: [
-          VocalistKey(vocalistName: 'Jordan', key: 'Ab'),
-        ],
       ),
     ],
   ),

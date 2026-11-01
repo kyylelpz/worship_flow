@@ -14,7 +14,6 @@ import 'package:worship_flow/features/profile/screens/chart_settings_screen.dart
 import 'package:worship_flow/features/rehearsal/screens/rehearsal_screen.dart';
 import 'package:worship_flow/features/setlists/data/mock_setlist_repository.dart';
 import 'package:worship_flow/features/setlists/providers/setlist_providers.dart';
-import 'package:worship_flow/features/setlists/screens/setlist_details_screen.dart';
 import 'package:worship_flow/features/setlists/screens/setlist_editor_screen.dart';
 import 'package:worship_flow/features/setlists/widgets/setlist_card.dart';
 import 'package:worship_flow/features/setlists/widgets/upcoming_service_card.dart';
@@ -75,9 +74,8 @@ void main() {
         GoRouterState.of(tester.element(find.byType(RehearsalScreen))).uri.path,
         RoutePaths.setlistRehearsalFor('setlist-1'));
     expect(find.byType(RehearsalScreen), findsOneWidget);
-    expect(find.byType(SetlistDetailsScreen), findsNothing);
     expect(find.text('Anchor of the Morning'), findsOneWidget);
-    expect(find.text('Key G · 1/3'), findsOneWidget);
+    expect(find.text('Key of G · 4/4'), findsOneWidget);
   });
 
   testWidgets('upcoming card opens rehearsal without details', (tester) async {
@@ -93,7 +91,6 @@ void main() {
         GoRouterState.of(tester.element(find.byType(RehearsalScreen))).uri.path,
         RoutePaths.setlistRehearsalFor('setlist-2'));
     expect(find.text('Mercy Like a River'), findsOneWidget);
-    expect(find.byType(SetlistDetailsScreen), findsNothing);
   });
 
   testWidgets('drawer selection and swipes stay synchronized and reset scroll',
@@ -166,7 +163,7 @@ void main() {
     expect(find.text('Draft preview · not published'), findsOneWidget);
     expect(find.text('King of Every Season'), findsOneWidget);
     await openDrawer(tester);
-    await tester.tap(find.text('Reorder'));
+    await tester.tap(find.text('Edit Setlist'));
     await tester.pumpAndSettle();
     expect(find.byType(SetlistEditorScreen), findsOneWidget);
     expect(
@@ -181,9 +178,9 @@ void main() {
       (tester) async {
     await launch(tester, route: RoutePaths.setlistRehearsalFor('setlist-1'));
     await openDrawer(tester);
-    await tester.tap(find.text('Details & management'));
+    await tester.tap(find.text('Edit Setlist'));
     await tester.pumpAndSettle();
-    expect(find.byType(SetlistDetailsScreen), findsOneWidget);
+    expect(find.byType(SetlistEditorScreen), findsOneWidget);
     await tester.tap(find.byTooltip('Actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
@@ -205,8 +202,8 @@ void main() {
     expect(find.byType(ChordChartView), findsNothing);
     await openDrawer(tester);
     expect(find.text('Edit'), findsNothing);
-    expect(find.text('Reorder'), findsNothing);
-    expect(find.text('Details & management'), findsNothing);
+    expect(find.text('Edit Setlist'), findsNothing);
+    expect(find.text('Edit Setlist'), findsNothing);
   });
 
   testWidgets('empty and missing setlists offer a safe return to list',

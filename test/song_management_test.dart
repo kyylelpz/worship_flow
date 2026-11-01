@@ -63,11 +63,14 @@ void main() {
     expect(find.text('Required.'), findsWidgets);
     await enter(tester, 'Title', 'Created in UI');
     await enter(tester, 'Artist', 'UI Artist');
-    await enter(tester, 'Category', 'Praise');
     await tester.ensureVisible(find.text('Add Arrangement'));
     await tester.tap(find.text('Add Arrangement'));
     await tester.pumpAndSettle();
-    await enter(tester, 'ChordPro source', data.originalSource);
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, data.originalSource);
+    await tester.tap(find.text('Use Source'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save Arrangement'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save Song'));
@@ -149,9 +152,9 @@ void main() {
     expect(find.byType(ArrangementEditorScreen), findsOneWidget);
     await enter(tester, 'Arrangement name', 'Updated Band');
     await enter(tester, 'BPM', '99');
-    await tester.ensureVisible(find.byTooltip('Open ChordPro editor'));
+    await tester.ensureVisible(find.text('Edit'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open ChordPro editor'));
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Use Source'));
     await tester.pumpAndSettle();
@@ -221,6 +224,10 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Add (1)'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Jordan · A'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Save'));
     await tester.pumpAndSettle();
     final setlist = await tester.runAsync(() =>
@@ -276,6 +283,10 @@ void main() {
     await tester.tap(find.widgetWithText(CheckboxListTile, 'New Song'));
     await tester.pump();
     await tester.tap(find.text('Add (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jordan · A'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await tester.runAsync(() => repo.deleteSong('group-1', id!));
     await tester.pumpAndSettle();

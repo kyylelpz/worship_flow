@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/chart_settings.dart';
 import '../data/source_chart_adapter.dart';
 
-/// Shared temporary source viewer for Rehearsal and future Live screens.
+/// Shared temporary source viewer for Rehearsal.
 /// Keep the key tied to song selection to reset scrolling on each switch.
 class SourceChartView extends StatefulWidget {
   const SourceChartView({

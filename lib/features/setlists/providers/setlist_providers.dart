@@ -44,6 +44,7 @@ final setlistFilterProvider =
 final filteredSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
   final filter = ref.watch(setlistFilterProvider);
   final asyncSetlists = ref.watch(groupSetlistsProvider);
+  final nextUpcoming = ref.watch(nextUpcomingSetlistProvider);
   final now = DateTime.now();
 
   return asyncSetlists.whenData((setlists) {
@@ -52,19 +53,22 @@ final filteredSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
       case SetlistFilter.upcoming:
         filtered = setlists
             .where((s) =>
-                s.status == SetlistStatus.published &&
-                s.serviceDateTime.isAfter(now))
+        s.status == SetlistStatus.published &&
+            s.serviceDateTime.isAfter(now) &&
+            s.id != nextUpcoming?.id) // 👈 exclude "UP NEXT"
             .toList();
         filtered.sort((a, b) => a.serviceDateTime.compareTo(b.serviceDateTime));
         break;
-      case SetlistFilter.previous:
+
+      case SetlistFilter.previous: // 👈 this was missing
         filtered = setlists
             .where((s) =>
-                s.status == SetlistStatus.published &&
-                !s.serviceDateTime.isAfter(now))
+        s.status == SetlistStatus.published &&
+            !s.serviceDateTime.isAfter(now))
             .toList();
         filtered.sort((a, b) => b.serviceDateTime.compareTo(a.serviceDateTime));
         break;
+
       case SetlistFilter.drafts:
         filtered = setlists
             .where((s) => s.status == SetlistStatus.draft || s.hasDraftChanges)

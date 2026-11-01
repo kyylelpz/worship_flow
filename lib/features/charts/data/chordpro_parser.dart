@@ -5,7 +5,8 @@ import 'timing_grid_parser.dart';
 class ChordProParser {
   const ChordProParser();
 
-  ChartDocument parse(String source, {String? defaultTimeSignature}) {
+  ChartDocument parse(String source,
+      {String? defaultTimeSignature, String? numberKey}) {
     final sections = <ChartSection>[];
     final metadata = <String, List<String>>{};
     var lines = <ChartLine>[];
@@ -27,13 +28,19 @@ class ChordProParser {
         .whereType<RegExpMatch>()
         .map((m) => MusicalKey.tryParse(m[1]!))
         .firstOrNull;
+    final numberedContext =
+        numberKey == null ? sourceKey : MusicalKey.tryParse(numberKey);
+    if (numberKey != null && numberedContext == null) {
+      throw ArgumentError.value(
+          numberKey, 'numberKey', 'Unsupported major/minor key');
+    }
     final warnings = <String>[];
     ChordSymbol? parseChord(String token, {bool warn = true}) {
       final letter = ChordSymbol.tryParse(token);
       if (letter != null) return letter;
       if (!RegExp(r'^[#b♯♭]*[0-9]').hasMatch(token)) return null;
       final numbered = ChordSymbol.tryParseNumbered(
-          token, sourceKey ?? const MusicalKey(NoteName('C', 0)));
+          token, numberedContext ?? const MusicalKey(NoteName('C', 0)));
       if (numbered == null) {
         if (warn) {
           warnings.add(
@@ -41,10 +48,10 @@ class ChordProParser {
         }
         return null;
       }
-      if (sourceKey == null) {
+      if (numberedContext == null) {
         if (warn) {
           warnings.add(
-              'Numbered chord "$token" requires a valid source {key}; preserved literally.');
+              'Numbered chord "$token" requires a selected key or valid source {key}; preserved literally.');
         }
         return null;
       }
@@ -100,7 +107,8 @@ class ChordProParser {
             metadata: metadata,
             warnings: warnings.toSet(),
             key: MusicalKey.tryParse(metadata['key']?.firstOrNull ?? '')),
-        defaultMeter: defaultTimeSignature);
+        defaultMeter: defaultTimeSignature,
+        numberKey: numberedContext);
   }
 
   ChartLine _parseLine(String raw, int number,

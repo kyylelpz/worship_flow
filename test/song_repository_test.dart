@@ -17,17 +17,15 @@ const originalSource =
 Arrangement draftArrangement() => const Arrangement(
     id: 'client-id',
     name: 'Band',
-    performanceKey: 'G',
     bpm: 80,
     timeSignature: '4/4',
-    chordProSource: originalSource,
-    vocalistKeys: [VocalistKey(vocalistName: 'Jordan', key: 'A')]);
+    chordProSource: originalSource);
 Song draftSong() => Song(
     id: 'client-id',
     title: 'New Song',
     artist: 'Artist',
     category: 'Worship',
-    defaultKey: 'G',
+    vocalistKeys: const [VocalistKey(vocalistName: 'Jordan', key: 'A')],
     arrangements: [draftArrangement()],
     isFavorite: false);
 
@@ -72,7 +70,6 @@ void main() {
             title: 'Updated',
             artist: 'New artist',
             category: 'Praise',
-            defaultKey: 'A',
             isFavorite: true,
             arrangements: const []));
     saved = (await f.repo.getSong('group-1', id))!;
@@ -81,8 +78,7 @@ void main() {
     expect(saved.primaryArrangement.id, arrangementId);
     expect(saved.primaryArrangement.chordProSource, originalSource);
     expect(() => saved.arrangements.clear(), throwsUnsupportedError);
-    expect(() => saved.primaryArrangement.vocalistKeys.clear(),
-        throwsUnsupportedError);
+    expect(() => saved.vocalistKeys.clear(), throwsUnsupportedError);
     await f.repo.deleteSong('group-1', id);
     expect(await f.repo.getSong('group-1', id), isNull);
     await Future<void>.delayed(Duration.zero);
@@ -100,10 +96,9 @@ void main() {
     expect(duplicate, isNot(added));
     final changed = original.copyWith(
         name: 'Updated arrangement',
-        performanceKey: 'A',
         bpm: 92,
         timeSignature: '6/8',
-        vocalistKeys: const [VocalistKey(vocalistName: 'Avery', key: 'Bb')]);
+        referenceLink: 'https://example.com/chart');
     await f.repo.updateArrangement('group-1', id, changed);
     final song = (await f.repo.getSong('group-1', id))!;
     expect(song.primaryArrangement.id, original.id);
@@ -132,7 +127,14 @@ void main() {
       draftSong().copyWith(title: ''),
       draftSong().copyWith(artist: ' '),
       draftSong().copyWith(category: ''),
-      draftSong().copyWith(defaultKey: 'H'),
+      draftSong().copyWith(
+          vocalistKeys: const [VocalistKey(vocalistName: 'A', key: 'H')]),
+      draftSong().copyWith(
+          vocalistKeys: const [VocalistKey(vocalistName: '', key: 'G')]),
+      draftSong().copyWith(vocalistKeys: const [
+        VocalistKey(vocalistName: 'A', key: 'G'),
+        VocalistKey(vocalistName: 'a', key: 'A')
+      ]),
       draftSong().copyWith(arrangements: const [])
     ]) {
       await expectLater(f.repo.createSong('group-1', invalid),
@@ -143,18 +145,9 @@ void main() {
       draftArrangement().copyWith(name: ''),
       draftArrangement().copyWith(bpm: 0),
       draftArrangement().copyWith(bpm: 401),
-      draftArrangement().copyWith(performanceKey: 'H7'),
+      draftArrangement().copyWith(referenceLink: 'javascript:alert(1)'),
       draftArrangement().copyWith(timeSignature: '5/4'),
       draftArrangement().copyWith(chordProSource: '  '),
-      draftArrangement().copyWith(performanceKey: 'Am'),
-      draftArrangement().copyWith(
-          vocalistKeys: const [VocalistKey(vocalistName: '', key: 'G')]),
-      draftArrangement().copyWith(
-          vocalistKeys: const [VocalistKey(vocalistName: 'A', key: 'H')]),
-      draftArrangement().copyWith(vocalistKeys: const [
-        VocalistKey(vocalistName: 'A', key: 'G'),
-        VocalistKey(vocalistName: 'a', key: 'A')
-      ])
     ]) {
       await expectLater(f.repo.createArrangement('group-1', id, invalid),
           throwsA(isA<SongRepositoryException>()));
@@ -247,13 +240,8 @@ void main() {
     final original =
         (await f.repo.getSong('group-1', 'song-1'))!.primaryArrangement;
     await expectLater(
-        f.repo.updateArrangement(
-            'group-1',
-            'song-1',
-            original.copyWith(
-                performanceKey: 'Gm',
-                chordProSource: '{key: Gm}\n[Gm]New mode',
-                vocalistKeys: const [])),
+        f.repo.updateArrangement('group-1', 'song-1',
+            original.copyWith(chordProSource: '{key: Gm}\n[Gm]New mode')),
         throwsA(isA<SongRepositoryException>()));
     expect(
         (await f.repo.getSong('group-1', 'song-1'))!

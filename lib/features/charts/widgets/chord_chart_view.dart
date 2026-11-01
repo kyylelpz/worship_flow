@@ -8,7 +8,7 @@ import '../models/chart_document.dart';
 import 'anchored_lyric_line.dart';
 import 'chord_label.dart';
 
-/// Navigation-independent shared chart surface for Rehearsal and future Live.
+/// Navigation-independent shared chart surface for Rehearsal.
 class ChordChartView extends StatefulWidget {
   const ChordChartView(
       {super.key,

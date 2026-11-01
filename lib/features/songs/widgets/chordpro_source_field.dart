@@ -15,9 +15,9 @@ class ChordProSourceField extends StatelessWidget {
         children: [
           Align(
               alignment: Alignment.centerRight,
-              child: IconButton(
-                  tooltip: 'Open ChordPro editor',
+              child: TextButton.icon(
                   icon: const Icon(Icons.open_in_full),
+                  label: const Text('Edit'),
                   onPressed: readOnly
                       ? null
                       : () async {
@@ -28,7 +28,7 @@ class ChordProSourceField extends StatelessWidget {
                           }
                         })),
           TextFormField(
-              readOnly: readOnly,
+              readOnly: true,
               controller: controller,
               autocorrect: false,
               enableSuggestions: false,

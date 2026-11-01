@@ -8,7 +8,6 @@ import '../../features/groups/screens/group_selection_screen.dart';
 import '../../features/profile/screens/chart_settings_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/rehearsal/screens/rehearsal_screen.dart';
-import '../../features/setlists/screens/setlist_details_screen.dart';
 import '../../features/setlists/screens/setlist_editor_screen.dart';
 import '../../features/setlists/screens/setlists_screen.dart';
 import '../../features/songs/screens/song_details_screen.dart';
@@ -99,24 +98,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: RoutePaths.setlistDetails,
-        builder: (_, state) => SetlistDetailsScreen(
-          setlistId: state.pathParameters['setlistId']!,
-        ),
-        routes: [
-          GoRoute(
-            path: 'edit',
-            builder: (_, state) => SetlistEditorScreen(
-              setlistId: state.pathParameters['setlistId']!,
-            ),
-          ),
-          GoRoute(
-            path: 'live',
-            redirect: (_, state) => RoutePaths.setlistDetailsFor(
-                state.pathParameters['setlistId']!),
-          ),
-        ],
-      ),
+          path: RoutePaths.setlistEditor,
+          redirect: (_, __) =>
+              ref.read(auth.currentRoleProvider)?.canManageSetlists == true
+                  ? null
+                  : RoutePaths.setlists,
+          builder: (_, state) => SetlistEditorScreen(
+              setlistId: state.pathParameters['setlistId']!)),
       GoRoute(
         path: RoutePaths.songs,
         builder: (_, __) => const SongLibraryScreen(),

@@ -171,35 +171,68 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(song?.title ?? 'Rehearsal',
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(
-              item == null
-                  ? setlist.name
-                  : 'Key ${chart?.document.key?.name ?? item.performanceKey} · ${index + 1}/${items.length}',
-              style: Theme.of(context).textTheme.labelMedium,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
+        toolbarHeight: MediaQuery.textScalerOf(context).scale(78),
+        title: Semantics(
+            button: ref.watch(canManageSongsProvider) && song != null,
+            child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: !ref.watch(canManageSongsProvider) ||
+                        song == null ||
+                        arrangement == null ||
+                        item == null
+                    ? null
+                    : () async {
+                        final action = await showDialog<String>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                                    title: Text(song.title),
+                                    content: Text(
+                                        'Artist: ${song.artist}\nArrangement: ${arrangement.name}\n'
+                                        'Worship Leader: ${item.vocalistName ?? "Not selected"}\nKey: ${item.performanceKey}'
+                                        '${personal == 0 ? "" : "\nDisplayed key: ${chart?.document.key?.name ?? item.performanceKey}"}'),
+                                    actions: [
+                                      TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, 'song'),
+                                          child: const Text('Edit Song')),
+                                      if (canEdit)
+                                        TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, 'setlist'),
+                                            child: const Text('Edit Setlist'))
+                                    ]));
+                        if (!context.mounted || action == null) return;
+                        await context.push(action == 'song'
+                            ? RoutePaths.songEditorFor(song.id)
+                            : RoutePaths.setlistEditorFor(setlist.id));
+                        if (mounted && action == 'setlist') {
+                          ref.invalidate(setlistByIdProvider(setlist.id));
+                        }
+                      },
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(song?.title ?? 'Rehearsal',
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      if (song != null)
+                        Text(song.artist,
+                            style: Theme.of(context).textTheme.bodySmall,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      Text(
+                          item == null
+                              ? setlist.name
+                              : 'Key of ${item.performanceKey} · ${arrangement?.timeSignature ?? "—"}'
+                                  '${personal == 0 ? "" : " · Display ${chart?.document.key?.name ?? item.performanceKey}"}',
+                          style: Theme.of(context).textTheme.labelSmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ]))),
         actions: [
           IconButton(
             tooltip: 'Chart controls',
             icon: const Icon(Icons.tune_rounded),
             onPressed: () => context.push(RoutePaths.chartSettings),
-          ),
-          IconButton(
-            tooltip: 'Live Mode',
-            icon: const Icon(Icons.play_circle_outline_rounded),
-            onPressed: item != null &&
-                    setlist.isPublished &&
-                    (role?.canEnterLiveMode ?? false)
-                ? () => context.push(RoutePaths.setlistLiveFor(setlist.id))
-                : null,
           ),
         ],
       ),
@@ -234,26 +267,11 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
                 ),
               ),
               if (canEdit)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    TextButton(
-                        onPressed: () => _openManagement(
-                            RoutePaths.setlistEditorFor(setlist.id)),
-                        child: const Text('Edit')),
-                    TextButton(
-                        onPressed: () => _openManagement(
-                            RoutePaths.setlistEditorFor(setlist.id)),
-                        child: const Text('Reorder')),
-                  ],
-                ),
-              ListTile(
-                leading: const Icon(Icons.info_outline),
-                title:
-                    Text(canEdit ? 'Details & management' : 'Setlist details'),
-                onTap: () =>
-                    _openManagement(RoutePaths.setlistDetailsFor(setlist.id)),
-              ),
+                TextButton.icon(
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => _openManagement(
+                        RoutePaths.setlistEditorFor(setlist.id)),
+                    label: const Text('Edit Setlist')),
               const Divider(height: 1),
               Expanded(
                 child: ListView(

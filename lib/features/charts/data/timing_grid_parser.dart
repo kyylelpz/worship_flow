@@ -3,7 +3,7 @@ import '../models/chord_symbol.dart';
 
 /// Worship Flow extension, applied after normal parsing. Source remains intact.
 ChartDocument attachTimingGrids(ChartDocument document,
-    {String? defaultMeter}) {
+    {String? defaultMeter, MusicalKey? numberKey}) {
   final grids = <TimingGrid>[];
   final warnings = <String>[...document.warnings];
   var meter = defaultMeter?.trim() ?? '4/4';
@@ -75,9 +75,10 @@ ChartDocument attachTimingGrids(ChartDocument document,
                 ? text.substring(1, text.length - 1)
                 : text;
             final symbol = ChordSymbol.tryParse(name) ??
-                (document.key == null
+                ((numberKey ?? document.key) == null
                     ? null
-                    : ChordSymbol.tryParseNumbered(name, document.key!));
+                    : ChordSymbol.tryParseNumbered(
+                        name, (numberKey ?? document.key)!));
             if (symbol == null) {
               warnings.add('${section.label}: unsupported grid token "$text".');
               valid = false;
@@ -117,29 +118,6 @@ ChartDocument attachTimingGrids(ChartDocument document,
     final preceding = candidates.where(
         (s) => s.lines.first.sourceLine < section.lines.first.sourceLine);
     final target = preceding.lastOrNull ?? candidates.firstOrNull;
-    if (target != null) {
-      List<String> sequence(Iterable<AnchoredChord> chords) {
-        final result = <String>[];
-        for (final chord in chords) {
-          final symbol = chord.symbol;
-          final identity = symbol == null
-              ? chord.text
-              : '${symbol.root.pitch}:${symbol.quality}/${symbol.bass?.pitch}';
-          if (result.isEmpty || result.last != identity) result.add(identity);
-        }
-        return result;
-      }
-
-      final lyrics = sequence(target.lines.expand((l) => l.chords));
-      final rhythm = sequence(measures
-          .expand((m) => m.slots)
-          .map((s) => s.chord)
-          .whereType<AnchoredChord>());
-      if (lyrics.join(';') != rhythm.join(';')) {
-        warnings.add(
-            '${section.label}: lyric and grid chord sequences differ; both representations are preserved.');
-      }
-    }
     if (measures.isEmpty) {
       valid = false;
       warnings.add('${section.label}: timing grid is empty.');
@@ -159,5 +137,41 @@ ChartDocument attachTimingGrids(ChartDocument document,
       metadata: document.metadata,
       key: document.key,
       grids: grids,
-      warnings: warnings);
+      warnings: [
+        ...warnings,
+        ...timingGridSequenceWarnings(document.sections, grids)
+      ]);
+}
+
+/// Compare the effective chord events, after any selected-key resolution.
+List<String> timingGridSequenceWarnings(
+    Iterable<ChartSection> sections, Iterable<TimingGrid> grids) {
+  List<String> sequence(Iterable<AnchoredChord> chords) {
+    final result = <String>[];
+    for (final chord in chords) {
+      final symbol = chord.symbol;
+      final identity = symbol == null
+          ? chord.text
+          : '${symbol.root.pitch}:${symbol.quality}/${symbol.bass?.pitch}';
+      if (result.isEmpty || result.last != identity) result.add(identity);
+    }
+    return result;
+  }
+
+  final warnings = <String>[];
+  for (final grid in grids) {
+    final target =
+        sections.where((s) => s.id == grid.targetSectionId).firstOrNull;
+    if (target == null) continue;
+    final lyrics = sequence(target.lines.expand((l) => l.chords));
+    final rhythm = sequence(grid.measures
+        .expand((m) => m.slots)
+        .map((s) => s.chord)
+        .whereType<AnchoredChord>());
+    if (lyrics.join(';') != rhythm.join(';')) {
+      warnings.add(
+          '${grid.label}: lyric and grid chord sequences differ; both representations are preserved.');
+    }
+  }
+  return warnings;
 }

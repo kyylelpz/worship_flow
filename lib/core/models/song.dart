@@ -1,4 +1,5 @@
 import 'arrangement.dart';
+import 'vocalist_key.dart';
 
 class Song {
   const Song({
@@ -6,7 +7,7 @@ class Song {
     required this.title,
     required this.artist,
     required this.category,
-    required this.defaultKey,
+    this.vocalistKeys = const [],
     required this.arrangements,
     required this.isFavorite,
   });
@@ -15,7 +16,7 @@ class Song {
   final String title;
   final String artist;
   final String category;
-  final String defaultKey;
+  final List<VocalistKey> vocalistKeys;
   final List<Arrangement> arrangements;
   final bool isFavorite;
 
@@ -26,14 +27,14 @@ class Song {
       String? title,
       String? artist,
       String? category,
-      String? defaultKey,
+      List<VocalistKey>? vocalistKeys,
       List<Arrangement>? arrangements}) {
     return Song(
       id: id,
       title: title ?? this.title,
       artist: artist ?? this.artist,
       category: category ?? this.category,
-      defaultKey: defaultKey ?? this.defaultKey,
+      vocalistKeys: vocalistKeys ?? this.vocalistKeys,
       arrangements: arrangements ?? this.arrangements,
       isFavorite: isFavorite ?? this.isFavorite,
     );

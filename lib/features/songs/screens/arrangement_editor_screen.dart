@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/models/arrangement.dart';
-import '../../../core/models/vocalist_key.dart';
 import '../data/song_validation.dart';
 import '../providers/song_providers.dart';
 import '../widgets/chordpro_source_field.dart';
@@ -21,26 +20,19 @@ class _ArrangementEditorScreenState
   final _form = GlobalKey<FormState>();
   late final _name =
       TextEditingController(text: widget.arrangement?.name ?? 'Full Band');
-  late final _key =
-      TextEditingController(text: widget.arrangement?.performanceKey ?? 'G');
   late final _bpm =
       TextEditingController(text: '${widget.arrangement?.bpm ?? 80}');
   late final _meter =
       TextEditingController(text: widget.arrangement?.timeSignature ?? '4/4');
   late final _source =
       TextEditingController(text: widget.arrangement?.chordProSource ?? '');
-  late final List<_VocalistFields> _vocalists = [
-    for (final v in widget.arrangement?.vocalistKeys ?? <VocalistKey>[])
-      _VocalistFields(v.vocalistName, v.key)
-  ];
+  late final _reference =
+      TextEditingController(text: widget.arrangement?.referenceLink ?? '');
   String? _error;
   @override
   void dispose() {
-    for (final c in [_name, _key, _bpm, _meter, _source]) {
+    for (final c in [_name, _reference, _bpm, _meter, _source]) {
       c.dispose();
-    }
-    for (final v in _vocalists) {
-      v.dispose();
     }
     super.dispose();
   }
@@ -54,14 +46,10 @@ class _ArrangementEditorScreenState
     final value = Arrangement(
         id: widget.arrangement?.id ?? const Uuid().v4(),
         name: _name.text,
-        performanceKey: _key.text,
         bpm: int.parse(_bpm.text),
         timeSignature: _meter.text,
         chordProSource: _source.text,
-        vocalistKeys: [
-          for (final v in _vocalists)
-            VocalistKey(vocalistName: v.name.text, key: v.key.text)
-        ]);
+        referenceLink: _reference.text);
     try {
       SongValidation.arrangement(value);
       Navigator.pop(context, value);
@@ -99,13 +87,6 @@ class _ArrangementEditorScreenState
               const SizedBox(height: 16),
               TextFormField(
                   readOnly: !ref.watch(canManageSongsProvider),
-                  controller: _key,
-                  decoration:
-                      const InputDecoration(labelText: 'Performance key'),
-                  validator: SongValidation.key),
-              const SizedBox(height: 16),
-              TextFormField(
-                  readOnly: !ref.watch(canManageSongsProvider),
                   controller: _bpm,
                   decoration: const InputDecoration(labelText: 'BPM'),
                   keyboardType: TextInputType.number,
@@ -118,59 +99,16 @@ class _ArrangementEditorScreenState
                       const InputDecoration(labelText: 'Time signature'),
                   validator: SongValidation.meter),
               const SizedBox(height: 16),
-              Text('Vocalist key presets',
-                  style: Theme.of(context).textTheme.titleMedium),
+              TextFormField(
+                  controller: _reference,
+                  readOnly: !ref.watch(canManageSongsProvider),
+                  decoration: const InputDecoration(
+                      labelText: 'Reference link (optional)'),
+                  validator: SongValidation.referenceLink),
               const SizedBox(height: 16),
-              for (final v in _vocalists)
-                Row(key: ObjectKey(v), children: [
-                  Expanded(
-                      child: TextFormField(
-                          readOnly: !ref.watch(canManageSongsProvider),
-                          controller: v.name,
-                          decoration:
-                              const InputDecoration(labelText: 'Vocalist'),
-                          validator: SongValidation.requiredText)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: TextFormField(
-                          readOnly: !ref.watch(canManageSongsProvider),
-                          controller: v.key,
-                          decoration:
-                              const InputDecoration(labelText: 'Vocalist key'),
-                          validator: SongValidation.key)),
-                  IconButton(
-                      tooltip: 'Remove vocalist',
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: ref.watch(canManageSongsProvider)
-                          ? () {
-                              setState(() => _vocalists.remove(v));
-                              WidgetsBinding.instance
-                                  .addPostFrameCallback((_) => v.dispose());
-                            }
-                          : null),
-                  const SizedBox(height: 8),
-                ]),
-              TextButton.icon(
-                  onPressed: ref.watch(canManageSongsProvider)
-                      ? () => setState(
-                          () => _vocalists.add(_VocalistFields('', 'G')))
-                      : null,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add vocalist preset')),
               ChordProSourceField(
                   controller: _source,
                   readOnly: !ref.watch(canManageSongsProvider)),
             ])),
       );
-}
-
-class _VocalistFields {
-  _VocalistFields(String name, String key)
-      : name = TextEditingController(text: name),
-        key = TextEditingController(text: key);
-  final TextEditingController name, key;
-  void dispose() {
-    name.dispose();
-    key.dispose();
-  }
 }

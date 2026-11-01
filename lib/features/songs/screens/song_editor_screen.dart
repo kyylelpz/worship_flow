@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/models/song.dart';
+import '../../../core/models/vocalist_key.dart';
 import '../../../core/models/arrangement.dart';
 import '../../../core/router/route_paths.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -27,16 +28,22 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
   final _form = GlobalKey<FormState>();
   final _title = TextEditingController(),
       _artist = TextEditingController(),
-      _category = TextEditingController(),
-      _key = TextEditingController(text: 'G');
+      _category = TextEditingController();
+  String _categoryChoice = 'Praise';
+  final List<_VocalistFields> _vocalists = [];
   late final String? _groupId = ref.read(selectedGroupIdProvider);
   final List<Arrangement> _draftArrangements = [];
   bool _favorite = false, _loaded = false, _saving = false;
   String? _error;
   (String, String, String, String, bool)? _initialMetadata;
   bool _allowExit = false, _leaving = false;
-  (String, String, String, String, bool) get _metadata =>
-      (_title.text, _artist.text, _category.text, _key.text, _favorite);
+  (String, String, String, String, bool) get _metadata => (
+        _title.text,
+        _artist.text,
+        _categoryChoice == 'Other' ? _category.text : _categoryChoice,
+        _vocalists.map((v) => '${v.name.text}=${v.key.text}').join('\n'),
+        _favorite
+      );
   bool get _hasUnsavedChanges =>
       _loaded &&
       (_metadata != _initialMetadata ||
@@ -45,13 +52,20 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
   @override
   void initState() {
     super.initState();
-    for (final controller in [_title, _artist, _category, _key]) {
+    for (final controller in [_title, _artist, _category]) {
       controller.addListener(_metadataChanged);
     }
   }
 
   void _metadataChanged() {
     if (_loaded && mounted) setState(() {});
+  }
+
+  void _addPreset(String name, String key) {
+    final fields = _VocalistFields(name, key);
+    fields.name.addListener(_metadataChanged);
+    fields.key.addListener(_metadataChanged);
+    _vocalists.add(fields);
   }
 
   Future<void> _requestBack() async {
@@ -117,15 +131,22 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
       _title.clear();
       _artist.clear();
       _category.clear();
-      _key.text = 'G';
+      _categoryChoice = 'Praise';
+      for (final v in _vocalists) {
+        v.dispose();
+      }
+      _vocalists.clear();
       _favorite = false;
     }
   }
 
   @override
   void dispose() {
-    for (final c in [_title, _artist, _category, _key]) {
+    for (final c in [_title, _artist, _category]) {
       c.dispose();
+    }
+    for (final v in _vocalists) {
+      v.dispose();
     }
     super.dispose();
   }
@@ -141,8 +162,11 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
         id: existing?.id ?? '',
         title: _title.text,
         artist: _artist.text,
-        category: _category.text,
-        defaultKey: _key.text,
+        category: _categoryChoice == 'Other' ? _category.text : _categoryChoice,
+        vocalistKeys: [
+          for (final v in _vocalists)
+            VocalistKey(vocalistName: v.name.text, key: v.key.text)
+        ],
         isFavorite: _favorite,
         arrangements: existing?.arrangements ?? _draftArrangements);
     try {
@@ -162,20 +186,17 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Song saved.')));
       setState(() => _allowExit = true);
-      if (existing == null) {
-        // Let PopScope rebuild before popping back to the existing library.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          final router = GoRouter.of(context);
-          if (router.canPop()) {
-            router.pop();
-          } else {
-            router.go(RoutePaths.songs);
-          }
-        });
-      } else {
-        context.go(RoutePaths.songDetailsFor(id));
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final router = GoRouter.of(context);
+        if (router.canPop()) {
+          router.pop();
+        } else {
+          router.go(existing == null
+              ? RoutePaths.songs
+              : RoutePaths.songDetailsFor(id));
+        }
+      });
     } catch (error) {
       if (mounted) {
         setState(() => _error = '$error');
@@ -233,11 +254,10 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
           _draftArrangements.add(Arrangement(
               id: const Uuid().v4(),
               name: '${arrangement.name} (Copy)',
-              performanceKey: arrangement.performanceKey,
               bpm: arrangement.bpm,
               timeSignature: arrangement.timeSignature,
               chordProSource: arrangement.chordProSource,
-              vocalistKeys: arrangement.vocalistKeys));
+              referenceLink: arrangement.referenceLink));
         }
       });
       return;
@@ -284,7 +304,13 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
         _title.text = song.title;
         _artist.text = song.artist;
         _category.text = song.category;
-        _key.text = song.defaultKey;
+        _categoryChoice =
+            const ['Praise', 'Worship', 'Communion'].contains(song.category)
+                ? song.category
+                : 'Other';
+        for (final v in song.vocalistKeys) {
+          _addPreset(v.vocalistName, v.key);
+        }
         _favorite = song.isFavorite;
       }
       _initialMetadata = _metadata;
@@ -316,15 +342,32 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
                 decoration: const InputDecoration(labelText: 'Artist'),
                 validator: SongValidation.requiredText),
             const SizedBox(height: 16),
-            TextFormField(
-                controller: _category,
+            DropdownButtonFormField<String>(
+                initialValue: _categoryChoice,
                 decoration: const InputDecoration(labelText: 'Category'),
-                validator: SongValidation.requiredText),
-            const SizedBox(height: 16),
-            TextFormField(
-                controller: _key,
-                decoration: const InputDecoration(labelText: 'Default key'),
-                validator: SongValidation.key),
+                items: [
+                  for (final c in ['Praise', 'Worship', 'Communion', 'Other'])
+                    DropdownMenuItem(value: c, child: Text(c))
+                ],
+                onChanged: (value) => setState(() {
+                      if (value == 'Other' && _categoryChoice != 'Other') {
+                        _category.clear();
+                      }
+                      _categoryChoice = value!;
+                    })),
+            Visibility(
+              visible: _categoryChoice == 'Other',
+              child: Column(
+                children: [
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _category,
+                    decoration: const InputDecoration(labelText: 'Custom category'),
+                    validator: SongValidation.requiredText,
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             SwitchListTile(
                 title: const Text('Favorite'),
@@ -340,7 +383,7 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
                   child: ListTile(
                       title: Text(arrangement.name),
                       subtitle: Text(
-                          '${arrangement.performanceKey} · ${arrangement.bpm} BPM · ${arrangement.timeSignature}'),
+                          '${arrangement.bpm} BPM · ${arrangement.timeSignature}'),
                       onTap: () => _editArrangement(song, arrangement),
                       trailing: PopupMenuButton<String>(
                           tooltip: 'Manage ${arrangement.name}',
@@ -361,7 +404,52 @@ class _SongEditorScreenState extends ConsumerState<SongEditorScreen> {
                 onPressed: () => _editArrangement(song, null),
                 icon: const Icon(Icons.add),
                 label: const Text('Add Arrangement')),
+            const SizedBox(height: 20),
+            Text('Vocal Key Presets',
+                style: Theme.of(context).textTheme.titleLarge),
+            for (final v in _vocalists)...[
+              const SizedBox(height: 16),
+              Row(key: ObjectKey(v), children: [
+                Expanded(
+                    child: TextFormField(
+                        controller: v.name,
+                        decoration:
+                            const InputDecoration(labelText: 'Vocalist'),
+                        validator: SongValidation.requiredText)),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: TextFormField(
+                        controller: v.key,
+                        decoration:
+                            const InputDecoration(labelText: 'Preferred key'),
+                        validator: SongValidation.key)),
+                IconButton(
+                    tooltip: 'Remove vocalist',
+                    icon: const Icon(Icons.remove_circle_outline),
+                    onPressed: () {
+                      setState(() => _vocalists.remove(v));
+                      WidgetsBinding.instance
+                          .addPostFrameCallback((_) => v.dispose());
+                    }),
+              ]),
+            ],
+            const SizedBox(height: 8),
+            TextButton.icon(
+                onPressed: () => setState(() => _addPreset('', '')),
+                icon: const Icon(Icons.add),
+                label: const Text('Add Vocalist Preset')),
           ])),
     ));
+  }
+}
+
+class _VocalistFields {
+  _VocalistFields(String name, String key)
+      : name = TextEditingController(text: name),
+        key = TextEditingController(text: key);
+  final TextEditingController name, key;
+  void dispose() {
+    name.dispose();
+    key.dispose();
   }
 }
