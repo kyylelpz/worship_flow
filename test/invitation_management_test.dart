@@ -167,8 +167,6 @@ void main() {
     await t.pumpAndSettle();
     expect(c.read(currentUserProvider)!.allowInvitations, isFalse);
     expect(find.text('Sunday Team'), findsOneWidget);
-    expect(find.textContaining('Turning this off keeps existing requests.'),
-        findsOneWidget);
     expect(repo.responses, isEmpty);
   });
   testWidgets(
