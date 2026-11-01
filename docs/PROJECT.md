@@ -284,6 +284,8 @@ Actual queries are direct group song/setlist collections and exact catalog/membe
 
 ### Resume and account isolation
 
+Resume results carry the UID they were resolved for, including empty results. The router waits for the authenticated account’s result before applying restoration, so an anonymous result cached during Firebase startup cannot consume that account’s one-time resume.
+
 After Firebase auth and profile completion, `/session-loading` remains visible while local IDs and current server membership/setlist access are validated. The router applies the result once per authenticated session. Valid saved state opens Rehearsal directly and selects the saved song; a missing song falls back to the first available item. Repeated occurrences of one song restore the first matching occurrence because only Song ID is persisted. Revoked/missing membership falls back to Group Selection; missing/inaccessible setlists fall back to the authorized group's Setlists. Connectivity failures show a retryable restoration state instead of assuming access. Sign-out/account changes cancel the pending restoration and never apply another UID's destination.
 
 Manual Group switching is respected for the current session and updates local group state while clearing the old setlist/song. Opening a setlist or changing its song updates the local IDs. Back to Setlists stays there for that session; a later launch still resumes the last opened setlist. Personal transpose, chart preferences and scroll remain separate; exact scroll is not saved. Firestore disk persistence remains disabled and committed content requires connectivity; no synchronization engine or offline mutation queue was added.

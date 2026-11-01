@@ -70,45 +70,65 @@ final resumeStoreProvider = Provider<ResumeStore?>((ref) =>
         ? PreferencesResumeStore()
         : null);
 
+/// Tags even an empty result with its account. A previously resolved anonymous
+/// result must never be consumed as an authenticated account's restoration.
+class ResumeResolution {
+  const ResumeResolution({required this.uid, this.location});
+  final String? uid;
+  final ResumeLocation? location;
+}
+
 /// Only reads while resolving. The router applies the verified destination once
 /// per authenticated account; manual navigation never re-triggers restoration.
-final sessionResumeProvider = FutureProvider<ResumeLocation?>((ref) async {
+final sessionResumeProvider = FutureProvider<ResumeResolution>((ref) async {
   var cancelled = false;
   ref.onDispose(() => cancelled = true);
   final account =
       ref.watch(currentUserProvider.select((u) => (u?.id, u?.profileComplete)));
-  if (account.$1 == null || account.$2 != true) return null;
+  if (account.$1 == null || account.$2 != true) {
+    return ResumeResolution(uid: account.$1);
+  }
   final store = ref.watch(resumeStoreProvider);
-  if (store == null) return null;
+  if (store == null) return ResumeResolution(uid: account.$1);
   final saved = await store.read(account.$1!);
-  if (saved == null || cancelled) return null;
+  if (saved == null || cancelled) return ResumeResolution(uid: account.$1);
   final groups = ref.read(groupRepositoryProvider);
   try {
     if (groups is FirestoreGroupRepository) {
-      if (!await groups.hasMembership(saved.groupId, account.$1!)) return null;
+      if (!await groups.hasMembership(saved.groupId, account.$1!)) {
+        return ResumeResolution(uid: account.$1);
+      }
     } else {
       final group = await groups.getGroup(saved.groupId);
       if (group == null || !group.members.any((m) => m.uid == account.$1)) {
-        return null;
+        return ResumeResolution(uid: account.$1);
       }
     }
   } on FirebaseException catch (e) {
-    if (['permission-denied', 'not-found'].contains(e.code)) return null;
+    if (['permission-denied', 'not-found'].contains(e.code)) {
+      return ResumeResolution(uid: account.$1);
+    }
     rethrow;
   }
-  if (cancelled) return null;
-  if (saved.setlistId == null) return ResumeLocation(groupId: saved.groupId);
+  if (cancelled) return ResumeResolution(uid: account.$1);
+  if (saved.setlistId == null) {
+    return ResumeResolution(
+        uid: account.$1, location: ResumeLocation(groupId: saved.groupId));
+  }
   final repository = ref.read(setlistRepositoryProvider);
   try {
     final setlist = repository is FirestoreSetlistRepository
         ? await repository.getInGroup(saved.groupId, saved.setlistId!)
         : await repository.getSetlist(saved.setlistId!);
-    return setlist == null || setlist.groupId != saved.groupId
-        ? ResumeLocation(groupId: saved.groupId)
-        : saved;
+    return ResumeResolution(
+        uid: account.$1,
+        location: setlist == null || setlist.groupId != saved.groupId
+            ? ResumeLocation(groupId: saved.groupId)
+            : saved);
   } on FirebaseException catch (e) {
     if (['permission-denied', 'not-found'].contains(e.code)) {
-      return ResumeLocation(groupId: saved.groupId);
+      return ResumeResolution(
+          uid: account.$1, location: ResumeLocation(groupId: saved.groupId));
     }
     rethrow;
   }

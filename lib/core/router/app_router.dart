@@ -68,14 +68,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             : RoutePaths.profileComplete;
       }
       final resume = ref.read(sessionResumeProvider);
-      if (resume.isLoading || resume.hasError) {
+      if (resume.isLoading ||
+          resume.hasError ||
+          resume.valueOrNull?.uid != session.user!.id) {
         return loc == RoutePaths.sessionLoading
             ? null
             : RoutePaths.sessionLoading;
       }
       if (resumedUid != session.user!.id) {
         resumedUid = session.user!.id;
-        final saved = resume.valueOrNull;
+        final saved = resume.valueOrNull?.location;
         if (saved != null) {
           ref.read(auth.sessionProvider.notifier).selectGroup(saved.groupId);
           return saved.setlistId == null

@@ -129,7 +129,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
     final availableSongs = ref.watch(groupSongsProvider).asData?.value;
     if (!_resumeSelected && items.isNotEmpty && availableSongs != null) {
       _resumeSelected = true;
-      final resume = ref.read(sessionResumeProvider).valueOrNull;
+      final resume = ref.read(sessionResumeProvider).valueOrNull?.location;
       if (resume?.setlistId == setlist.id &&
           resume?.groupId == setlist.groupId) {
         final found = items.indexWhere((i) =>
