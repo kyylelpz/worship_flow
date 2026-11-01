@@ -1,5 +1,7 @@
 abstract final class RoutePaths {
   static const String login = '/login';
+  static const String sessionLoading = '/session-loading';
+  static const String profileComplete = '/profile/complete';
   static const String groups = '/groups';
   static const String groupsMembers = '/groups/:groupId/members';
 

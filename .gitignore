@@ -54,6 +54,7 @@ macos/Runner.xcodeproj/xcuserdata/
 
 # --- Android ---------------------------------------------------------------
 android/.gradle/
+android/.kotlin/
 android/captures/
 android/local.properties
 android/key.properties
@@ -124,18 +125,13 @@ secrets.*
 *.p12
 *.pfx
 
-# --- Firebase (future phases) ---------------------------------------------
-# Keep these ignored now; remove when Firebase is properly wired.
-firebase.json
-.firebaserc
+# --- Firebase -------------------------------------------------------------
+# Client configuration is not a server credential; security comes from rules.
 firebase-debug.log
 firestore-debug.log
-firestore.indexes.json
-firestore.rules
 storage.rules
 google-services.json
 GoogleService-Info.plist
-lib/firebase_options.dart
 
 # --- Coverage / testing ----------------------------------------------------
 coverage/
@@ -158,3 +154,6 @@ mock_data_local/
 # AI agent tooling — local only
 .agents/
 skills-lock.json
+functions/node_modules/
+.firebase/
+ui-debug.log

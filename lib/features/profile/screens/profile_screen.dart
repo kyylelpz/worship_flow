@@ -6,6 +6,7 @@ import '../../../core/router/route_paths.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../groups/providers/group_providers.dart';
+import '../widgets/private_invitation_code.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -14,7 +15,10 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final user = session.user;
-    final role = session.role;
+    final role = ref.watch(currentRoleProvider);
+    final groupId = ref.watch(selectedGroupIdProvider);
+    final membership =
+        groupId == null ? null : ref.watch(currentMembershipProvider(groupId));
     final group = ref.watch(selectedGroupProvider);
     final theme = Theme.of(context);
 
@@ -61,7 +65,8 @@ class ProfileScreen extends ConsumerWidget {
                           children: [
                             if (role != null)
                               _Pill(label: role.label, highlight: true),
-                            if (user != null) _Pill(label: user.instrument),
+                            if (membership != null)
+                              _Pill(label: membership.positionLabel),
                           ],
                         ),
                       ],
@@ -73,6 +78,7 @@ class ProfileScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           const _SectionHeader(title: 'Account'),
+          PrivateInvitationCode(key: ValueKey(user?.id)),
           Card(
             child: Column(
               children: [
@@ -96,9 +102,9 @@ class ProfileScreen extends ConsumerWidget {
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.piano_rounded),
-                  title: const Text('Instrument'),
+                  title: const Text('Group Position'),
                   trailing: Text(
-                    user?.instrument ?? '—',
+                    membership?.positionLabel ?? '—',
                     style: theme.textTheme.bodyMedium,
                   ),
                 ),

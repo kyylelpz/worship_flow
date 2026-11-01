@@ -1,0 +1,59 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-east2",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "worship-flow-f3166",
+          "appId": "1:758181750942:android:e834542106637e0ad2738f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "worship-flow-f3166",
+          "configurations": {
+            "android": "1:758181750942:android:e834542106637e0ad2738f",
+            "ios": "1:758181750942:ios:052a33913c14bf98d2738f",
+            "macos": "1:758181750942:ios:052a33913c14bf98d2738f",
+            "web": "1:758181750942:web:4823aa5472394b2bd2738f",
+            "windows": "1:758181750942:web:739c1725a755c5a4d2738f"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "foundation",
+      "runtime": "nodejs22",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.log",
+        "test"
+      ]
+    }
+  ],
+  "emulators": {
+    "auth": {
+      "port": 9099
+    },
+    "firestore": {
+      "port": 8080
+    },
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  }
+}

@@ -2,11 +2,13 @@ import 'dart:async';
 
 import '../../../core/mock_data/mock_groups.dart';
 import '../../../core/models/group_member.dart';
+import '../../../core/mock_data/mock_users.dart';
+import '../../../core/models/membership_position.dart';
 import '../../../core/models/user_role.dart';
 import '../../../core/models/worship_group.dart';
 import 'group_repository.dart';
 
-class MockGroupRepository implements GroupRepository {
+class MockGroupRepository implements GroupRepository, GroupCreationRepository {
   MockGroupRepository({this.delay = const Duration(milliseconds: 300)});
 
   final Duration delay;
@@ -48,10 +50,47 @@ class MockGroupRepository implements GroupRepository {
     return null;
   }
 
+  final _creationRequests = <String, String>{};
+  @override
+  Future<String> createGroupWithPosition(
+      {required String name,
+      required String churchName,
+      required MembershipPosition position,
+      String customPosition = '',
+      required String requestId}) async {
+    await Future<void>.delayed(delay);
+    if (_creationRequests.containsKey(requestId)) {
+      return _creationRequests[requestId]!;
+    }
+    final id = 'mock-created-${_creationRequests.length + 1}';
+    final now = DateTime.now();
+    _groups.add(WorshipGroup(
+        id: id,
+        name: name,
+        churchName: churchName,
+        accentColorValue: 0xff2f7a6b,
+        members: [
+          GroupMember(
+              user: mockCurrentUser,
+              role: UserRole.administrator,
+              position: position,
+              customPosition: customPosition,
+              joinedAt: now,
+              updatedAt: now)
+        ]));
+    _creationRequests[requestId] = id;
+    _emit();
+    return id;
+  }
+
   @override
   Future<void> createGroup(String name, String churchName) async {
-    await Future<void>.delayed(delay);
-    // Phase 1 stub — no-op until Firestore.
+    await createGroupWithPosition(
+        name: name,
+        churchName: churchName,
+        position: MembershipPosition.other,
+        customPosition: 'Other',
+        requestId: '${DateTime.now().microsecondsSinceEpoch}');
   }
 
   @override

@@ -1,5 +1,6 @@
 import '../models/app_user.dart';
 import '../models/group_member.dart';
+import '../models/membership_position.dart';
 import '../models/user_role.dart';
 import '../models/worship_group.dart';
 import 'mock_users.dart';
@@ -16,16 +17,19 @@ final mockGroups = <WorshipGroup>[
     members: [
       GroupMember(
         user: mockCurrentUser,
+        position: MembershipPosition.acousticGuitar,
         role: UserRole.administrator,
         joinedAt: _daysAgo(420),
       ),
       GroupMember(
         user: mockUserTwo,
+        position: MembershipPosition.keyboard,
         role: UserRole.worshipLeader,
         joinedAt: _daysAgo(300),
       ),
       GroupMember(
         user: mockUserThree,
+        position: MembershipPosition.drums,
         role: UserRole.worshipTrainee,
         joinedAt: _daysAgo(90),
       ),
@@ -39,11 +43,13 @@ final mockGroups = <WorshipGroup>[
     members: [
       GroupMember(
         user: mockCurrentUser,
+        position: MembershipPosition.acousticGuitar,
         role: UserRole.worshipLeader,
         joinedAt: _daysAgo(180),
       ),
       GroupMember(
         user: mockUserTwo,
+        position: MembershipPosition.keyboard,
         role: UserRole.administrator,
         joinedAt: _daysAgo(400),
       ),

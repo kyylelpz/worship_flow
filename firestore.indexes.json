@@ -1,0 +1,6 @@
+{
+  "indexes": [],
+  "fieldOverrides": [
+    {"collectionGroup": "accountPrivate", "fieldPath": "invitationCode", "indexes": []}
+  ]
+}

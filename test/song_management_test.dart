@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:worship_flow/core/firebase/firebase_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:worship_flow/core/mock_data/mock_users.dart';
@@ -23,6 +24,7 @@ Future<ProviderContainer> launch(WidgetTester tester,
     {String route = '/songs', UserRole role = UserRole.administrator}) async {
   final fixture = data.CatalogFixture();
   final container = ProviderContainer(overrides: [
+    useMockBackendProvider.overrideWithValue(true),
     groupRepositoryProvider.overrideWithValue(fixture.groups),
     songCatalogProvider.overrideWithValue(fixture.catalog),
     setlistRepositoryProvider.overrideWithValue(fixture.setlists),

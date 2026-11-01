@@ -1,4 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
+import '../firebase/firebase_providers.dart';
+import '../../features/profile/screens/profile_completion_screen.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/providers/auth_providers.dart' as auth;
@@ -48,10 +51,29 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final loggingIn = loc == RoutePaths.login;
       final choosingGroup = loc == RoutePaths.groups;
 
+      if (session.isRestoring) {
+        return loc == RoutePaths.sessionLoading
+            ? null
+            : RoutePaths.sessionLoading;
+      }
       if (!session.isAuthenticated) {
         return loggingIn ? null : RoutePaths.login;
       }
 
+      if (session.user?.profileComplete != true) {
+        return loc == RoutePaths.profileComplete
+            ? null
+            : RoutePaths.profileComplete;
+      }
+      if (loc == RoutePaths.profileComplete ||
+          loc == RoutePaths.sessionLoading) {
+        return session.hasGroup ? RoutePaths.setlists : RoutePaths.groups;
+      }
+      if (!ref.read(useMockBackendProvider) &&
+          loc.startsWith('/groups/') &&
+          loc.endsWith('/members')) {
+        return RoutePaths.groups;
+      }
       if (!session.hasGroup && !choosingGroup) {
         return RoutePaths.groups;
       }
@@ -71,6 +93,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
+      GoRoute(
+          path: RoutePaths.sessionLoading,
+          builder: (_, __) =>
+              const Scaffold(body: Center(child: CircularProgressIndicator()))),
+      GoRoute(
+          path: RoutePaths.profileComplete,
+          builder: (_, __) => ProfileCompletionScreen(
+              key: ValueKey(ref.read(auth.currentUserProvider)?.id))),
       GoRoute(
         path: RoutePaths.login,
         builder: (_, __) => const LoginScreen(),

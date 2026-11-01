@@ -18,7 +18,7 @@ final songRepositoryProvider = Provider<SongRepository>((ref) {
         return SongSession(
             userId: state.user?.id,
             groupId: state.selectedGroupId,
-            role: state.role);
+            role: ref.read(currentRoleProvider));
       },
       groups: ref.watch(groupRepositoryProvider),
       isReferenced: (group, song, arrangement) {

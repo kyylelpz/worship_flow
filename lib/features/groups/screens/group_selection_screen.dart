@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/user_role.dart';
+import '../../../core/firebase/firebase_providers.dart';
+import 'group_creation_screen.dart';
 import '../../../core/models/worship_group.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -27,7 +29,8 @@ class GroupSelectionScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: const _DevRoleFab(),
+      floatingActionButton:
+          ref.watch(useMockBackendProvider) ? const _DevRoleFab() : null,
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(userGroupsProvider);
@@ -176,49 +179,18 @@ class _JoinOrCreateCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Join with an invite code or start a new worship team.',
+              'Create a worship team. Invitation-based joining is coming in the next phase.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showStubDialog(context, 'Join Group'),
-                    icon: const Icon(Icons.login_rounded, size: 18),
-                    label: const Text('Join'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _showStubDialog(context, 'Create Group'),
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('Create'),
-                  ),
-                ),
-              ],
-            ),
+            FilledButton.icon(
+                onPressed: () => Navigator.of(context).push<String>(
+                    MaterialPageRoute(
+                        builder: (_) => const GroupCreationScreen())),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Create Group')),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showStubDialog(BuildContext context, String title) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: const Text(
-          'This will be implemented when Firebase is integrated.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
   }
@@ -229,37 +201,36 @@ class _EmptyGroupsState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Text(
-          'You haven\'t joined any worship groups yet.',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
+    return ListView(padding: const EdgeInsets.all(24), children: const [
+      Text(
+          'You have no worship groups yet. Create your first group to continue.'),
+      SizedBox(height: 20),
+      _JoinOrCreateCard(),
+    ]);
   }
 }
 
-class _ErrorState extends StatelessWidget {
+class _ErrorState extends ConsumerWidget {
   const _ErrorState({required this.message});
 
   final String message;
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text('Something went wrong:\n$message',
-            textAlign: TextAlign.center),
-      ),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ListView(padding: const EdgeInsets.all(32), children: [
+      Text('Something went wrong:\n$message', textAlign: TextAlign.center),
+      TextButton(
+          onPressed: () {
+            ref.invalidate(userGroupsProvider);
+            ref.invalidate(allGroupsProvider);
+          },
+          child: const Text('Retry')),
+    ]);
   }
 }
 
 /// Developer-only role switcher. Deliberately ugly-labeled to signal it
-/// should not ship in production. Firestore impl will remove this entirely.
+/// only rendered with explicit development mocks, never Firebase mode.
 class _DevRoleFab extends ConsumerWidget {
   const _DevRoleFab();
 

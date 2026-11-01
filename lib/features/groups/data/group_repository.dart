@@ -1,10 +1,10 @@
 import '../../../core/models/user_role.dart';
 import '../../../core/models/worship_group.dart';
+import '../../../core/models/membership_position.dart';
 
-/// Contract for group data access. Mock impl is in-memory; Firestore impl
-/// in Phase 2 will subscribe to `groups/{id}` and `groups/{id}/members`.
+/// Group reads are scoped to authenticated membership in Firebase mode.
 abstract class GroupRepository {
-  /// Emits the full group list on subscribe, then on every mutation.
+  /// Emits all groups this repository is authorized to expose (own groups in Firebase).
   Stream<List<WorshipGroup>> watchGroups();
 
   /// Groups the given user belongs to.
@@ -12,16 +12,26 @@ abstract class GroupRepository {
 
   Future<WorshipGroup?> getGroup(String groupId);
 
-  /// Phase 1: no-op — join/create is a stub UI. Firestore impl will write.
+  /// Legacy entry point; Firebase creation uses GroupCreationRepository with an explicit position.
   Future<void> createGroup(String name, String churchName);
 
-  /// Phase 1: no-op.
+  /// Reserved for invitation joining; unavailable in the Firebase foundation.
   Future<void> joinGroup(String inviteCode);
 
-  /// Change a member's role. Only Administrators may call this in real impls.
+  /// Legacy development control; trusted membership management is deferred.
   Future<void> updateMemberRole({
     required String groupId,
     required String userId,
     required UserRole role,
   });
+}
+
+/// Creation is an idempotent trusted operation, not an arbitrary membership write.
+abstract interface class GroupCreationRepository {
+  Future<String> createGroupWithPosition(
+      {required String name,
+      required String churchName,
+      required MembershipPosition position,
+      String customPosition = '',
+      required String requestId});
 }

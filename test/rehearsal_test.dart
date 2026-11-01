@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:worship_flow/core/firebase/firebase_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +23,7 @@ Future<ProviderContainer> launch(WidgetTester tester,
     {String? route, UserRole role = UserRole.administrator}) async {
   final repository = MockSetlistRepository(delay: Duration.zero);
   final container = ProviderContainer(overrides: [
+    useMockBackendProvider.overrideWithValue(true),
     setlistRepositoryProvider.overrideWithValue(repository),
   ]);
   addTearDown(() {
@@ -238,6 +240,7 @@ void main() {
     ]);
     await tester.pumpWidget(ProviderScope(
       overrides: [
+        useMockBackendProvider.overrideWithValue(true),
         setlistByIdProvider(setlist.id).overrideWith((ref) async => setlist)
       ],
       child: const MaterialApp(home: RehearsalScreen(setlistId: 'setlist-1')),

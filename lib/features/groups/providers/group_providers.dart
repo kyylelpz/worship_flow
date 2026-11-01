@@ -6,23 +6,33 @@ import '../../../core/models/worship_group.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../data/group_repository.dart';
 import '../data/mock_group_repository.dart';
+import '../data/firestore_group_repository.dart';
+import '../../../core/firebase/firebase_providers.dart';
 
 /// Swap to FirestoreGroupRepository in Phase 2 — no other file changes.
 final groupRepositoryProvider = Provider<GroupRepository>((ref) {
-  final repo = MockGroupRepository();
-  ref.onDispose(repo.dispose);
-  return repo;
+  if (ref.watch(useMockBackendProvider)) {
+    final repo = MockGroupRepository();
+    ref.onDispose(repo.dispose);
+    return repo;
+  }
+  return FirestoreGroupRepository(ref.watch(firestoreProvider),
+      ref.watch(firebaseFunctionsProvider), ref.watch(firebaseAuthProvider));
 });
 
 /// All groups the current user belongs to.
 final userGroupsProvider = StreamProvider<List<WorshipGroup>>((ref) {
-  final user = ref.watch(currentUserProvider);
-  if (user == null) return const Stream.empty();
-  return ref.watch(groupRepositoryProvider).watchGroupsForUser(user.id);
+  final account =
+      ref.watch(currentUserProvider.select((u) => (u?.id, u?.profileComplete)));
+  if (account.$1 == null || account.$2 != true) return Stream.value(const []);
+  return ref.watch(groupRepositoryProvider).watchGroupsForUser(account.$1!);
 });
 
 /// All groups (used by Group Members screen and future admin tools).
 final allGroupsProvider = StreamProvider<List<WorshipGroup>>((ref) {
+  final account =
+      ref.watch(currentUserProvider.select((u) => (u?.id, u?.profileComplete)));
+  if (account.$1 == null || account.$2 != true) return Stream.value(const []);
   return ref.watch(groupRepositoryProvider).watchGroups();
 });
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/session_state.dart';
+import '../../../core/firebase/firebase_providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/auth_providers.dart';
 
@@ -21,7 +22,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!mounted) return;
     setState(() => _pressed = false);
     // Router's redirect will navigate. No context.go needed.
-    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +36,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(next.errorMessage!)),
         );
-        ref.read(sessionProvider.notifier).clearError();
       }
     });
 
@@ -44,7 +44,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
-            child: Padding(
+            child: SingleChildScrollView(
+                child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -70,15 +71,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     isLoading: isLoading,
                     onPressed: _handleSignIn,
                   ),
+                  if (session.errorMessage != null) ...[
+                    Text(session.errorMessage!,
+                        style: TextStyle(color: theme.colorScheme.error)),
+                    TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => ref
+                                .read(sessionProvider.notifier)
+                                .retrySession(),
+                        child: const Text('Retry account loading')),
+                    TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () =>
+                                ref.read(sessionProvider.notifier).signOut(),
+                        child: const Text('Sign out')),
+                  ],
                   const SizedBox(height: 16),
                   Text(
-                    'Mock sign-in — no account is created.',
+                    ref.watch(useMockBackendProvider)
+                        ? 'Development mock sign-in — no Firebase account is created.'
+                        : 'Sign in securely with your Google account.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
               ),
-            ),
+            )),
           ),
         ),
       ),
@@ -146,10 +166,13 @@ class _GoogleSignInButton extends StatelessWidget {
                 children: [
                   _GoogleGlyph(color: theme.colorScheme.onSurface),
                   const SizedBox(width: 12),
-                  Text(
+                  Flexible(
+                      child: Text(
                     'Continue with Google',
                     style: theme.textTheme.titleMedium,
-                  ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )),
                 ],
               ),
       ),

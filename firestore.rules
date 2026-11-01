@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// Foundation schema (all writes are validated by trusted callable functions):
+// profiles/{uid}: firstName/lastName strings <=80, verified email <=320,
+//   profileComplete bool, createdAt/updatedAt timestamps, completedAt timestamp|null.
+// profiles/{uid}/memberships/{groupId}: uid/groupId strings, createdAt/updatedAt.
+// groups/{groupId}: name<=120, churchName<=160, createdBy UID (immutable),
+//   memberCount int, accentColorValue int, createdAt/updatedAt timestamps.
+// groups/{groupId}/members/{uid}: immutable uid/groupId, firstName/lastName<=80,
+//   role administrator|worshipLeader|worshipTrainee; position independent enum,
+//   customPosition<=80 (only for other), createdAt/updatedAt timestamps.
+// accountPrivate/{uid}, invitationCodeReservations/{code}, foundationLimits/**
+//   and groupCreationRequests: server-only. No client can read codes directly.
+// No client writes are permitted; callable validators, transactions and quotas
+// are the only creation/update mechanism. Song/setlist persistence is deferred.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() { return request.auth != null; }
+    function isVerifiedGoogle() {
+      return isAuthenticated() && request.auth.token.email_verified == true
+          && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function isOwner(uid) { return isVerifiedGoogle() && request.auth.uid == uid; }
+    function hasCompletedProfile() {
+      return isVerifiedGoogle()
+          && exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.profileComplete == true;
+    }
+    function isMember(groupId) {
+      return hasCompletedProfile()
+          && exists(/databases/$(database)/documents/groups/$(groupId))
+          && exists(/databases/$(database)/documents/groups/$(groupId)/members/$(request.auth.uid));
+    }
+    match /profiles/{uid} {
+      allow get: if isOwner(uid);
+      allow list, create, update, delete: if false;
+      match /memberships/{groupId} {
+        allow get, list: if isOwner(uid) && hasCompletedProfile();
+        allow create, update, delete: if false;
+      }
+    }
+    match /groups/{groupId} {
+      allow get: if isMember(groupId);
+      allow list, create, update, delete: if false;
+      match /members/{uid} {
+        allow get, list: if isMember(groupId);
+        allow create, update, delete: if false;
+      }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

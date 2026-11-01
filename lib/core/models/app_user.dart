@@ -6,6 +6,7 @@ class AppUser {
     required this.email,
     required this.instrument,
     required this.avatarInitials,
+    this.profileComplete = true,
   });
 
   final String id;
@@ -14,6 +15,7 @@ class AppUser {
   final String email;
   final String instrument;
   final String avatarInitials;
+  final bool profileComplete;
 
   String get fullName => '$firstName $lastName';
 
@@ -21,6 +23,7 @@ class AppUser {
     String? firstName,
     String? lastName,
     String? instrument,
+    bool? profileComplete,
   }) {
     return AppUser(
       id: id,
@@ -29,6 +32,7 @@ class AppUser {
       email: email,
       instrument: instrument ?? this.instrument,
       avatarInitials: avatarInitials,
+      profileComplete: profileComplete ?? this.profileComplete,
     );
   }
 }
