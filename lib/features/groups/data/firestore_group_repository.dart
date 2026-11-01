@@ -1,3 +1,5 @@
+import '../../../core/cache/content_cache_database.dart';
+import '../../../core/cache/offline_reads.dart';
 import '../../../core/cache/local_content_cache.dart';
 import 'dart:async';
 
@@ -53,6 +55,7 @@ GroupMember memberFromFirestore(Map<String, dynamic> data,
 }
 
 class _GroupSnapshot {
+  bool groupConfirmed = false, membersConfirmed = false;
   Map<String, dynamic>? group;
   List<GroupMember>? members;
   final subscriptions = <StreamSubscription<dynamic>>[];
@@ -69,14 +72,24 @@ class FirestoreGroupRepository
     try {
       final member = await firestore
           .doc('groups/$groupId/members/$uid')
-          .get(const GetOptions(source: Source.server));
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 8));
       final allowed = member.exists &&
           member.data()?['uid'] == uid &&
           member.data()?['groupId'] == groupId;
       if (!allowed) await cache?.revoke(uid, groupId);
       return allowed;
     } on FirebaseException catch (e) {
-      if (['permission-denied', 'not-found'].contains(e.code)) return false;
+      if (['permission-denied', 'not-found'].contains(e.code)) {
+        await cache?.revoke(uid, groupId);
+        return false;
+      }
+      if (isConnectionFailure(e) && cache != null) {
+        return cache!.hasOfflineAccess(groupId);
+      }
+      rethrow;
+    } on TimeoutException {
+      if (cache != null) return cache!.hasOfflineAccess(groupId);
       rethrow;
     }
   }
@@ -110,6 +123,29 @@ class FirestoreGroupRepository
         }
         final entries = <String, _GroupSnapshot>{};
         var cancelled = false;
+        var published = false;
+        cache?.metadata(CachedKind.access).then((rows) {
+          if (cancelled || published || auth.currentUser?.uid != userId) return;
+          final groups = <WorshipGroup>[];
+          for (final row in rows) {
+            try {
+              final value = Map<String, dynamic>.from(row['value'] as Map);
+              if (value['uid'] != userId ||
+                  cache?.begin(row['groupId'] as String) == null) {
+                continue;
+              }
+              final member = memberFromFirestore(
+                      Map<String, dynamic>.from(value['member'] as Map),
+                      expectedUid: userId,
+                      expectedGroupId: row['groupId'] as String)
+                  .copyWith(role: UserRole.worshipTrainee);
+              groups.add(_group(row['groupId'] as String,
+                  Map<String, dynamic>.from(value['group'] as Map), [member]));
+            } catch (_) {/* Invalid metadata is not permission. */}
+          }
+          output.add(groups);
+        }).catchError((Object _) {});
+
         void publish() {
           if (cancelled ||
               entries.values.any((e) => e.group == null || e.members == null)) {
@@ -121,21 +157,74 @@ class FirestoreGroupRepository
                 .map((e) => _group(e.key, e.value.group!, e.value.members!))
                 .toList()
               ..sort((a, b) => a.name.compareTo(b.name));
+            published = true;
+            for (final group in groups) {
+              final entry = entries[group.id]!;
+              final member = group.members.firstWhere((m) => m.uid == userId);
+              if (entry.groupConfirmed && entry.membersConfirmed) {
+                unawaited(
+                    cache?.saveMetadata(group.id, CachedKind.access, group.id, {
+                  'uid': userId,
+                  'group': entry.group!,
+                  'member': {
+                    'uid': userId,
+                    'groupId': group.id,
+                    'role': member.role.name,
+                    'position': member.position.name,
+                    'customPosition': member.customPosition,
+                    'firstName': member.user.firstName,
+                    'lastName': member.user.lastName,
+                    'createdAt': Timestamp.fromDate(member.createdAt),
+                    'updatedAt':
+                        Timestamp.fromDate(member.updatedAt ?? member.createdAt)
+                  }
+                }));
+              }
+            }
             output.add(List.unmodifiable(groups));
           } catch (error) {
+            if (error is FirebaseException &&
+                error.code == 'permission-denied') {
+              unawaited(cache?.invalidateAccount(userId));
+            }
             output.addError(accountFailure(error));
           }
         }
 
         void failure(Object error) {
-          if (!cancelled) output.addError(accountFailure(error));
+          if (!cancelled) {
+            if (isConnectionFailure(error)) {
+              cache?.markAccessOffline();
+              return;
+            }
+            output.addError(accountFailure(error));
+          }
+        }
+
+        void groupFailure(String id, Object error) {
+          if (error is FirebaseException &&
+              const ['permission-denied', 'not-found'].contains(error.code)) {
+            unawaited(cache?.revoke(userId, id));
+            final removed = entries.remove(id);
+            for (final sub
+                in removed?.subscriptions ?? <StreamSubscription<dynamic>>[]) {
+              unawaited(sub.cancel());
+            }
+            publish();
+            return;
+          }
+          failure(error);
         }
 
         final membershipSub = firestore
             .collection('profiles/$userId/memberships')
             .snapshots(includeMetadataChanges: true)
             .listen((snapshot) {
-          if (cancelled || snapshot.metadata.isFromCache) return;
+          if (cancelled) return;
+          if (snapshot.metadata.isFromCache) {
+            cache?.markAccessOffline();
+            return;
+          }
           final ids = snapshot.docs.map((d) => d.id).toSet();
           if (!snapshot.metadata.hasPendingWrites) {
             unawaited(cache?.retainAuthorizedGroups(userId, ids));
@@ -153,21 +242,35 @@ class FirestoreGroupRepository
                 .doc('groups/$id')
                 .snapshots(includeMetadataChanges: true)
                 .listen((doc) {
-              if (cancelled || doc.metadata.isFromCache) return;
-              if (!doc.exists) {
-                failure(
-                    const AccountException('A group is no longer available.'));
+              if (cancelled) return;
+              if (doc.metadata.isFromCache) {
+                entry.groupConfirmed = false;
+                cache?.markAccessOffline();
                 return;
               }
+              if (!doc.exists) {
+                groupFailure(
+                    id,
+                    FirebaseException(
+                        plugin: 'cloud_firestore', code: 'not-found'));
+                return;
+              }
+              entry.groupConfirmed = !doc.metadata.hasPendingWrites;
               entry.group = doc.data();
               publish();
-            }, onError: failure));
+            }, onError: (Object error) => groupFailure(id, error)));
             entry.subscriptions.add(firestore
                 .collection('groups/$id/members')
                 .snapshots(includeMetadataChanges: true)
                 .listen((members) {
-              if (cancelled || members.metadata.isFromCache) return;
+              if (cancelled) return;
+              if (members.metadata.isFromCache) {
+                entry.membersConfirmed = false;
+                cache?.markAccessOffline();
+                return;
+              }
               try {
+                entry.membersConfirmed = !members.metadata.hasPendingWrites;
                 entry.members = members.docs
                     .map((d) => memberFromFirestore(d.data(),
                         expectedUid: d.id, expectedGroupId: id))
@@ -180,7 +283,7 @@ class FirestoreGroupRepository
               } catch (error) {
                 failure(error);
               }
-            }, onError: failure));
+            }, onError: (Object error) => groupFailure(id, error)));
           }
           publish();
         }, onError: failure);

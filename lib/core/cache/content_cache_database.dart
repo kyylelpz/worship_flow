@@ -5,7 +5,7 @@ import '../firebase/content_codec.dart';
 import '../models/song.dart';
 import '../models/setlist.dart';
 
-enum CachedKind { songs, setlists }
+enum CachedKind { songs, setlists, profile, access }
 
 class CachedDocument {
   const CachedDocument(this.id, this.data);
@@ -69,6 +69,12 @@ class ContentCacheDatabase extends GeneratedDatabase {
         doc.data['id'] != doc.id ||
         doc.data['groupId'] != group) {
       throw const FormatException('Cache document identity mismatch.');
+    }
+    if (kind == CachedKind.profile || kind == CachedKind.access) {
+      if (doc.data['value'] is! Map) {
+        throw const FormatException('Invalid cached access metadata.');
+      }
+      return;
     }
     if (kind == CachedKind.songs) {
       final song = songFromData(doc.data);
@@ -203,6 +209,20 @@ class ContentCacheDatabase extends GeneratedDatabase {
   Future<CachedCollection<Setlist>> setlists(String uid, String group) =>
       read(uid, group, CachedKind.setlists, setlistFromData);
 
+  Future<List<Map<String, dynamic>>> metadata(
+      String uid, CachedKind kind) async {
+    final rows = await customSelect(
+        'SELECT payload FROM cached_documents WHERE uid=? AND kind=?',
+        variables: [Variable(uid), Variable(kind.name)]).get();
+    final result = <Map<String, dynamic>>[];
+    for (final row in rows) {
+      try {
+        result.add(decode(row.read<String>('payload')));
+      } catch (_) {/* Unusable metadata is not authorization. */}
+    }
+    return result;
+  }
+
   Future<void> purge(String uid, {String? group}) => transaction(() async {
         for (final table in ['cached_documents', 'cached_collections']) {
           await customStatement(
@@ -213,8 +233,11 @@ class ContentCacheDatabase extends GeneratedDatabase {
   Future<void> retainGroups(String uid, Set<String> groups) =>
       transaction(() async {
         for (final table in ['cached_documents', 'cached_collections']) {
+          final exclusion = groups.isEmpty
+              ? ''
+              : ' AND group_id NOT IN (${List.filled(groups.length, '?').join(',')})';
           await customStatement(
-              'DELETE FROM $table WHERE uid=?${groups.isEmpty ? '' : ' AND group_id NOT IN (${List.filled(groups.length, '?').join(',')})'}',
+              "DELETE FROM $table WHERE uid=? AND group_id<>''$exclusion",
               [uid, ...groups]);
         }
       });

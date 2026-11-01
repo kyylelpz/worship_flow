@@ -30,7 +30,21 @@ class FirestoreSetlistRepository
     return db
         .collection('groups/$groupId/setlists')
         .snapshots(includeMetadataChanges: true)
-        .asyncMap((snapshot) async {
+        .where((snapshot) {
+      if (snapshot.metadata.isFromCache) {
+        cache?.markOffline(groupId, CachedKind.setlists);
+      }
+      return !snapshot.metadata.isFromCache &&
+          !snapshot.metadata.hasPendingWrites;
+    }).handleError((Object error, StackTrace stack) {
+      cache?.markOffline(groupId, CachedKind.setlists);
+      if (error is FirebaseException &&
+          const ['permission-denied', 'unauthenticated'].contains(error.code) &&
+          uid != null) {
+        cache?.revoke(uid, groupId);
+      }
+      Error.throwWithStackTrace(error, stack);
+    }).asyncMap((snapshot) async {
       if (uid == null || auth.currentUser?.uid != uid) {
         throw StateError('Account changed.');
       }
@@ -40,6 +54,7 @@ class FirestoreSetlistRepository
           [for (final d in snapshot.docs) CachedDocument(d.id, d.data())],
           fromServer: !snapshot.metadata.isFromCache,
           pendingWrites: snapshot.metadata.hasPendingWrites);
+      cache?.markFresh(groupId, CachedKind.setlists);
       return setlists;
     });
   }
@@ -52,7 +67,8 @@ class FirestoreSetlistRepository
     final uid = auth.currentUser?.uid;
     final lease = cache?.begin(groupId);
     final d = await _ref(groupId, setlistId)
-        .get(const GetOptions(source: Source.server));
+        .get(const GetOptions(source: Source.server))
+        .timeout(const Duration(seconds: 8));
     if (uid == null || auth.currentUser?.uid != uid) {
       throw StateError('Account changed.');
     }

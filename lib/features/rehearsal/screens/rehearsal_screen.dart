@@ -1,3 +1,6 @@
+import '../../groups/providers/group_providers.dart';
+import '../../../core/cache/cache_providers.dart';
+import '../../../core/models/song.dart';
 import 'package:flutter/material.dart';
 import '../../../core/firebase/navigation_resume.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,7 +26,42 @@ class RehearsalScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(cacheChangesProvider);
+    final cache = ref.watch(localContentCacheProvider);
+    final group = ref.watch(selectedGroupIdProvider);
+    // Keep the live subscriptions attached so reconnection refreshes the cache.
+    ref.watch(groupSongsProvider);
     final setlist = ref.watch(setlistByIdProvider(setlistId));
+    if (cache != null && group != null) {
+      final cached = ref.watch(cachedRehearsalProvider((group, setlistId)));
+      final offline = cache.isOffline(group);
+      if (cached.asData != null) {
+        final bundle = cached.asData!.value;
+        return _RehearsalBody(
+            key: ValueKey(bundle.setlist.id),
+            setlist: bundle.setlist,
+            cachedSongs: bundle.songs,
+            offline: offline);
+      }
+      if (offline) {
+        return cached.when(
+            loading: () => Scaffold(
+                appBar: AppBar(title: const Text('Rehearsal')),
+                body: const Center(child: CircularProgressIndicator())),
+            error: (error, _) => _Unavailable(
+                message: error is StateError
+                    ? 'Offline: ${error.message}'
+                    : 'Offline charts are unavailable. Reconnect and refresh to cache them again.',
+                onRetry: () {
+                  ref.invalidate(groupSetlistsProvider);
+                  ref.invalidate(groupSongsProvider);
+                  ref.invalidate(allGroupsProvider);
+                  ref.invalidate(userGroupsProvider);
+                  ref.invalidate(cachedRehearsalProvider((group, setlistId)));
+                }),
+            data: (_) => const SizedBox.shrink());
+      }
+    }
     return setlist.when(
       loading: () => Scaffold(
         appBar: AppBar(title: const Text('Rehearsal')),
@@ -69,7 +107,13 @@ class _Unavailable extends StatelessWidget {
 }
 
 class _RehearsalBody extends ConsumerStatefulWidget {
-  const _RehearsalBody({super.key, required this.setlist});
+  const _RehearsalBody(
+      {super.key,
+      required this.setlist,
+      this.cachedSongs,
+      this.offline = false});
+  final List<Song>? cachedSongs;
+  final bool offline;
   final Setlist setlist;
 
   @override
@@ -106,7 +150,8 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
   }
 
   List<SetlistItem> _items(Setlist setlist) {
-    final canEdit = ref.read(currentRoleProvider)?.canManageSetlists ?? false;
+    final canEdit = !widget.offline &&
+        (ref.read(currentRoleProvider)?.canManageSetlists ?? false);
     if (setlist.isPublished && (!_previewDraft || !canEdit)) {
       return setlist.publishedItems;
     }
@@ -124,9 +169,10 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
   Widget build(BuildContext context) {
     final setlist = widget.setlist;
     final role = ref.watch(currentRoleProvider);
-    final canEdit = role?.canManageSetlists ?? false;
+    final canEdit = !widget.offline && (role?.canManageSetlists ?? false);
     final items = _items(setlist);
-    final availableSongs = ref.watch(groupSongsProvider).asData?.value;
+    final availableSongs =
+        widget.cachedSongs ?? ref.watch(groupSongsProvider).asData?.value;
     if (!_resumeSelected && items.isNotEmpty && availableSongs != null) {
       _resumeSelected = true;
       final resume = ref.read(sessionResumeProvider).valueOrNull?.location;
@@ -159,7 +205,9 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
         }
       });
     }
-    final asyncSongs = ref.watch(groupSongsProvider);
+    final AsyncValue<List<Song>> asyncSongs = widget.cachedSongs == null
+        ? ref.watch(groupSongsProvider)
+        : AsyncData(widget.cachedSongs!);
     if (asyncSongs.isLoading) {
       return Scaffold(
           appBar: AppBar(title: const Text('Rehearsal')),
@@ -171,7 +219,8 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
           body:
               Center(child: Text('Could not load songs: ${asyncSongs.error}')));
     }
-    final songs = ref.watch(songsListProvider);
+    final List<Song> songs =
+        widget.cachedSongs ?? ref.watch<List<Song>>(songsListProvider);
     final song = songs.where((song) => song.id == item?.songId).firstOrNull;
     final arrangement = song?.arrangements
         .where((arrangement) => arrangement.id == item?.arrangementId)
@@ -213,10 +262,13 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
         ),
         toolbarHeight: MediaQuery.textScalerOf(context).scale(78),
         title: Semantics(
-            button: ref.watch(canManageSongsProvider) && song != null,
+            button: !widget.offline &&
+                ref.watch(canManageSongsProvider) &&
+                song != null,
             child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: !ref.watch(canManageSongsProvider) ||
+                onTap: widget.offline ||
+                        !ref.watch(canManageSongsProvider) ||
                         song == null ||
                         arrangement == null ||
                         item == null
@@ -358,6 +410,18 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody> {
       ),
       body: Column(
         children: [
+          if (widget.offline)
+            MaterialBanner(
+                content: const Text('Offline · Cached charts · Read only'),
+                leading: const Icon(Icons.cloud_off_outlined),
+                actions: [
+                  TextButton(
+                      onPressed: () {
+                        ref.invalidate(groupSetlistsProvider);
+                        ref.invalidate(groupSongsProvider);
+                      },
+                      child: const Text('Refresh'))
+                ]),
           if (_previewDraft && canEdit)
             const Padding(
                 padding: EdgeInsets.all(8),

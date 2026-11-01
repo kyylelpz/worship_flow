@@ -1,3 +1,4 @@
+import '../../../core/cache/cache_providers.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,6 +26,10 @@ class SetlistsScreen extends ConsumerWidget {
     final asyncSetlists = ref.watch(filteredSetlistsProvider);
     final filter = ref.watch(setlistFilterProvider);
     final theme = Theme.of(context);
+    ref.watch(cacheChangesProvider);
+    final groupId = ref.watch(selectedGroupIdProvider);
+    final cache = ref.watch(localContentCacheProvider);
+    final cached = cache != null && groupId != null && cache.isOffline(groupId);
 
     Future<void> openCreate() async {
       if (group == null) return;
@@ -34,6 +39,14 @@ class SetlistsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
+        bottom: cached
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(32),
+                child: Padding(
+                    padding: EdgeInsets.all(6),
+                    child:
+                        Text('Offline · Fully cached published setlists only')))
+            : null,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

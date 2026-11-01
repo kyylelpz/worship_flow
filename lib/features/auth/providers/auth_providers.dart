@@ -1,3 +1,4 @@
+import '../../../core/cache/cache_providers.dart';
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,8 @@ import '../data/mock_auth_repository.dart';
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   if (ref.watch(useMockBackendProvider)) return MockAuthRepository();
   return FirebaseAuthRepository(
-      ref.watch(firebaseAuthProvider), ref.watch(firestoreProvider));
+      ref.watch(firebaseAuthProvider), ref.watch(firestoreProvider),
+      cache: ref.watch(localContentCacheProvider));
 });
 
 class AuthController extends StateNotifier<SessionState> {
@@ -147,6 +149,12 @@ final currentUserProvider = Provider<AppUser?>(
 final currentRoleProvider = Provider<UserRole?>(
   (ref) {
     final session = ref.watch(sessionProvider);
+    ref.watch(cacheChangesProvider);
+    final cache = ref.watch(localContentCacheProvider);
+    if (session.selectedGroupId != null &&
+        cache?.isReadOnly(session.selectedGroupId!) == true) {
+      return UserRole.worshipTrainee;
+    }
     if (ref.watch(useMockBackendProvider)) return session.role;
     return session.selectedGroupId == null
         ? null

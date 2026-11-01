@@ -1,3 +1,5 @@
+import '../../../core/cache/content_cache_database.dart';
+import '../../../core/cache/offline_reads.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../groups/data/firestore_group_repository.dart';
 import '../../../core/firebase/firebase_providers.dart';
@@ -54,7 +56,15 @@ final groupSongsProvider = StreamProvider<List<Song>>((ref) {
   if (session.user == null || group == null) return Stream.value(const []);
   // Restart permission-sensitive subscriptions when memberships change.
   ref.watch(allGroupsProvider);
-  return ref.watch(songRepositoryProvider).watchSongs(group);
+  final remote = ref.watch(songRepositoryProvider).watchSongs(group);
+  final cache = ref.watch(localContentCacheProvider);
+  return cache == null
+      ? remote
+      : cachedThenRemote(() async {
+          if (!await cache.hasOfflineAccess(group)) return <Song>[];
+          final songs = (await cache.readSongs(group)).items;
+          return songs;
+        }, remote, onCached: () => cache.markOffline(group, CachedKind.songs));
 });
 final songsListProvider = Provider<List<Song>>(
     (ref) => ref.watch(groupSongsProvider).asData?.value ?? const []);

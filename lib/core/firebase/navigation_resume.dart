@@ -1,3 +1,5 @@
+import '../cache/cache_providers.dart';
+import '../cache/offline_reads.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,6 +94,19 @@ final sessionResumeProvider = FutureProvider<ResumeResolution>((ref) async {
   if (store == null) return ResumeResolution(uid: account.$1);
   final saved = await store.read(account.$1!);
   if (saved == null || cancelled) return ResumeResolution(uid: account.$1);
+  final local = ref.read(localContentCacheProvider);
+  if (local?.offlineIdentity == true) {
+    if (!await local!.hasOfflineAccess(saved.groupId)) {
+      return ResumeResolution(uid: account.$1);
+    }
+    final setlist = saved.setlistId == null
+        ? null
+        : await local.readSetlist(saved.groupId, saved.setlistId!);
+    return ResumeResolution(
+        uid: account.$1,
+        location:
+            setlist == null ? ResumeLocation(groupId: saved.groupId) : saved);
+  }
   final groups = ref.read(groupRepositoryProvider);
   try {
     if (groups is FirestoreGroupRepository) {
@@ -104,8 +119,9 @@ final sessionResumeProvider = FutureProvider<ResumeResolution>((ref) async {
         return ResumeResolution(uid: account.$1);
       }
     }
-  } on FirebaseException catch (e) {
-    if (['permission-denied', 'not-found'].contains(e.code)) {
+  } catch (e) {
+    if (e is FirebaseException &&
+        ['permission-denied', 'not-found'].contains(e.code)) {
       return ResumeResolution(uid: account.$1);
     }
     rethrow;
@@ -125,10 +141,23 @@ final sessionResumeProvider = FutureProvider<ResumeResolution>((ref) async {
         location: setlist == null || setlist.groupId != saved.groupId
             ? ResumeLocation(groupId: saved.groupId)
             : saved);
-  } on FirebaseException catch (e) {
-    if (['permission-denied', 'not-found'].contains(e.code)) {
+  } catch (e) {
+    if (e is FirebaseException &&
+        ['permission-denied', 'not-found'].contains(e.code)) {
       return ResumeResolution(
           uid: account.$1, location: ResumeLocation(groupId: saved.groupId));
+    }
+    if (isConnectionFailure(e)) {
+      final cache = ref.read(localContentCacheProvider);
+      if (cache != null && await cache.hasOfflineAccess(saved.groupId)) {
+        final setlist =
+            await cache.readSetlist(saved.groupId, saved.setlistId!);
+        return ResumeResolution(
+            uid: account.$1,
+            location: setlist == null
+                ? ResumeLocation(groupId: saved.groupId)
+                : saved);
+      }
     }
     rethrow;
   }

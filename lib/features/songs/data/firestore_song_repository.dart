@@ -33,7 +33,20 @@ class FirestoreSongRepository implements SongRepository {
     return db
         .collection('groups/$groupId/songs')
         .snapshots(includeMetadataChanges: true)
-        .asyncMap((snapshot) async {
+        .where((snapshot) {
+      if (snapshot.metadata.isFromCache) {
+        cache?.markOffline(groupId, CachedKind.songs);
+      }
+      return !snapshot.metadata.isFromCache &&
+          !snapshot.metadata.hasPendingWrites;
+    }).handleError((Object error, StackTrace stack) {
+      cache?.markOffline(groupId, CachedKind.songs);
+      if (error is FirebaseException &&
+          const ['permission-denied', 'unauthenticated'].contains(error.code)) {
+        cache?.revoke(uid, groupId);
+      }
+      Error.throwWithStackTrace(error, stack);
+    }).asyncMap((snapshot) async {
       _scope(groupId);
       if (auth.currentUser?.uid != uid) throw StateError('Account changed.');
       final songs = snapshot.docs.map((d) => songFromData(d.data())).toList()
@@ -42,6 +55,7 @@ class FirestoreSongRepository implements SongRepository {
           [for (final d in snapshot.docs) CachedDocument(d.id, d.data())],
           fromServer: !snapshot.metadata.isFromCache,
           pendingWrites: snapshot.metadata.hasPendingWrites);
+      cache?.markFresh(groupId, CachedKind.songs);
       return songs;
     });
   }

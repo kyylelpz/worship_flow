@@ -1,3 +1,6 @@
+import '../../../core/cache/local_content_cache.dart';
+import '../../../core/cache/content_cache_database.dart';
+import '../../../core/cache/offline_reads.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -59,7 +62,8 @@ class FirebaseAuthRepository
         AuthRepository,
         PersistentAuthRepository,
         AccountProfileRepository {
-  FirebaseAuthRepository(this.auth, this.firestore);
+  FirebaseAuthRepository(this.auth, this.firestore, {this.cache});
+  final LocalContentCache? cache;
   final FirebaseAuth auth;
   final FirebaseFirestore firestore;
   Future<void>? _googleReady;
@@ -166,18 +170,52 @@ class FirebaseAuthRepository
     if (auth.currentUser == null) return null;
     final uid = auth.currentUser!.uid;
     try {
-      await _ensureAccount();
+      await _ensureAccount().timeout(const Duration(seconds: 8));
       final profile = await firestore
           .doc('profiles/$uid')
-          .get(const GetOptions(source: Source.server));
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 8));
       if (auth.currentUser?.uid != uid) return null;
       if (!profile.exists) {
         throw const AccountException(
             'Could not load your account profile. Please retry.');
       }
+      await cache?.saveMetadata('', CachedKind.profile, uid, profile.data()!);
+      cache?.markIdentityFresh();
       return userFromProfile(uid, profile.data()!);
     } catch (error) {
+      if (error is FirebaseException && error.code == 'permission-denied') {
+        await cache?.invalidateAccount(uid);
+      }
+      final offline = await _offlineProfile(uid, error);
+      if (offline != null) return offline;
       throw accountFailure(error);
+    }
+  }
+
+  Future<AppUser?> _offlineProfile(String uid, Object error) async {
+    final user = auth.currentUser;
+    if (!isConnectionFailure(error) ||
+        cache == null ||
+        user?.uid != uid ||
+        user?.emailVerified != true ||
+        !user!.providerData.any((p) => p.providerId == 'google.com')) {
+      return null;
+    }
+    try {
+      final saved = (await cache!.metadata(CachedKind.profile))
+          .where((d) => d['id'] == uid)
+          .firstOrNull;
+      if (saved == null) return null;
+      final profile = userFromProfile(
+          uid, Map<String, dynamic>.from(saved['value'] as Map));
+      if (profile.profileComplete) {
+        cache!.markIdentityOffline();
+        return profile;
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -196,35 +234,63 @@ class FirebaseAuthRepository
             return;
           }
           try {
-            await _ensureAccount();
+            await _ensureAccount().timeout(const Duration(seconds: 8));
             if (cancelled || version != generation) return;
             final initial = await firestore
                 .doc('profiles/${user.uid}')
                 .get(const GetOptions(source: Source.server))
-                .timeout(const Duration(seconds: 20));
+                .timeout(const Duration(seconds: 8));
             if (cancelled || version != generation) return;
             if (!initial.exists) {
               throw const AccountException(
                   'Profile unavailable. Sign out and retry.');
             }
+            await cache?.saveMetadata(
+                '', CachedKind.profile, user.uid, initial.data()!);
+            cache?.markIdentityFresh();
             output.add(userFromProfile(user.uid, initial.data()!));
+          } catch (error) {
+            if (error is FirebaseException &&
+                error.code == 'permission-denied') {
+              await cache?.invalidateAccount(user.uid);
+            }
+            final offline = await _offlineProfile(user.uid, error);
+            if (cancelled || version != generation) return;
+            if (offline == null) {
+              output.addError(accountFailure(error));
+              return;
+            }
+            output.add(offline);
+          }
+          try {
             profileSub = firestore
                 .doc('profiles/${user.uid}')
                 .snapshots(includeMetadataChanges: true)
                 .listen((snapshot) {
               if (cancelled ||
                   version != generation ||
-                  snapshot.metadata.isFromCache) {
+                  snapshot.metadata.isFromCache ||
+                  snapshot.metadata.hasPendingWrites) {
                 return;
               }
               if (snapshot.exists) {
+                unawaited(cache?.saveMetadata(
+                    '', CachedKind.profile, user.uid, snapshot.data()!));
+                cache?.markIdentityFresh();
                 output.add(userFromProfile(user.uid, snapshot.data()!));
               } else {
+                unawaited(cache?.invalidateAccount(user.uid));
                 output.addError(const AccountException(
                     'Profile unavailable. Sign out and retry.'));
               }
             }, onError: (Object error) {
-              if (!cancelled && version == generation) {
+              if (!cancelled &&
+                  version == generation &&
+                  !isConnectionFailure(error)) {
+                if (error is FirebaseException &&
+                    error.code == 'permission-denied') {
+                  unawaited(cache?.invalidateAccount(user.uid));
+                }
                 output.addError(accountFailure(error));
               }
             });

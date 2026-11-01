@@ -1,3 +1,5 @@
+import '../../../core/cache/content_cache_database.dart';
+import '../../../core/cache/offline_reads.dart';
 import '../../../core/cache/cache_providers.dart';
 import '../../groups/providers/group_providers.dart';
 import '../../groups/data/firestore_group_repository.dart';
@@ -31,7 +33,12 @@ final setlistRepositoryProvider = Provider<SetlistRepository>((ref) {
 final groupSetlistsProvider = StreamProvider<List<Setlist>>((ref) {
   final groupId = ref.watch(selectedGroupIdProvider);
   if (groupId == null) return const Stream.empty();
-  return ref.watch(setlistRepositoryProvider).watchSetlists(groupId);
+  final remote = ref.watch(setlistRepositoryProvider).watchSetlists(groupId);
+  final cache = ref.watch(localContentCacheProvider);
+  return cache == null
+      ? remote
+      : cachedThenRemote(() => cache.offlineSetlists(groupId), remote,
+          onCached: () => cache.markOffline(groupId, CachedKind.setlists));
 });
 
 /// A single setlist by id.
@@ -44,6 +51,18 @@ final setlistByIdProvider =
   }
   final initial = await ref.watch(groupSetlistsProvider.future);
   return initial.where((s) => s.id == setlistId).firstOrNull;
+});
+
+/// Offline lists only advertise fully cached published rehearsals.
+final visibleGroupSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
+  ref.watch(cacheChangesProvider);
+  final group = ref.watch(selectedGroupIdProvider);
+  final remote = ref.watch(groupSetlistsProvider);
+  final cache = ref.watch(localContentCacheProvider);
+  if (group != null && cache != null && cache.isOffline(group)) {
+    return ref.watch(offlineSetlistsProvider(group));
+  }
+  return remote;
 });
 
 /// Filter state for the Setlists screen.
@@ -62,7 +81,7 @@ final setlistFilterProvider =
 /// Derived: the group's setlists filtered by the current filter, sorted.
 final filteredSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
   final filter = ref.watch(setlistFilterProvider);
-  final asyncSetlists = ref.watch(groupSetlistsProvider);
+  final asyncSetlists = ref.watch(visibleGroupSetlistsProvider);
   final nextUpcoming = ref.watch(nextUpcomingSetlistProvider);
   final now = DateTime.now();
 
@@ -101,7 +120,7 @@ final filteredSetlistsProvider = Provider<AsyncValue<List<Setlist>>>((ref) {
 
 /// The next upcoming published setlist — used by UpcomingServiceCard.
 final nextUpcomingSetlistProvider = Provider<Setlist?>((ref) {
-  final asyncSetlists = ref.watch(groupSetlistsProvider).valueOrNull;
+  final asyncSetlists = ref.watch(visibleGroupSetlistsProvider).valueOrNull;
   if (asyncSetlists == null) return null;
   final now = DateTime.now();
   final upcoming = asyncSetlists
