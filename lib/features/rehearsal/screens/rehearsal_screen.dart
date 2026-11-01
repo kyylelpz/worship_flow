@@ -373,11 +373,6 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                           overflow: TextOverflow.ellipsis),
                     ]))),
         actions: [
-          IconButton(
-            tooltip: 'Chart controls',
-            icon: const Icon(Icons.tune_rounded),
-            onPressed: () => context.push(RoutePaths.chartSettings),
-          ),
           ValueListenableBuilder<bool>(
             valueListenable: _metronome,
             builder: (context, playing, _) => Semantics(
@@ -413,6 +408,11 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                 },
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Chart controls',
+            icon: const Icon(Icons.tune_rounded),
+            onPressed: () => context.push(RoutePaths.chartSettings),
           ),
         ],
       ),
