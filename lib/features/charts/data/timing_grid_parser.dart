@@ -1,7 +1,7 @@
 import '../models/chart_document.dart';
 import '../models/chord_symbol.dart';
 
-/// Worship Flow extension, applied after normal parsing. Source remains intact.
+/// WorshipFlow extension, applied after normal parsing. Source remains intact.
 ChartDocument attachTimingGrids(ChartDocument document,
     {String? defaultMeter, MusicalKey? numberKey}) {
   final grids = <TimingGrid>[];

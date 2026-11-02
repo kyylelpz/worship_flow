@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # --- pubspec deps --------------------------------------------------------
-# Replaces the default pubspec.yaml with the Worship Flow one.
+# Replaces the default pubspec.yaml with the WorshipFlow one.
 cat > pubspec.yaml <<'EOF'
 name: worship_flow
-description: Worship Flow — Every Note for His Glory
+description: WorshipFlow — Every Note for His Glory
 publish_to: "none"
 version: 0.1.0
 

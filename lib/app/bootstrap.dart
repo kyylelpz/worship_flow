@@ -37,6 +37,6 @@ Future<void> bootstrap(Widget Function() builder) async {
                     child: Padding(
                         padding: EdgeInsets.all(24),
                         child: Text(
-                            'Firebase could not start. Check platform configuration and connection, then restart Worship Flow.')))))));
+                            'Firebase could not start. Check platform configuration and connection, then restart WorshipFlow.')))))));
   }
 }

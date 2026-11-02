@@ -39,5 +39,37 @@
       "enabled": false
     },
     "singleProjectMode": true
-  }
+  },
+  "hosting": [
+    {
+      "site": "worship-flow-f3166",
+      "public": "build/web",
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "site": "myworshipflow",
+      "public": "build/web",
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "site": "worshipflowph",
+      "public": "build/web",
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ]
 }

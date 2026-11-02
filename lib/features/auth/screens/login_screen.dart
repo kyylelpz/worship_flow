@@ -54,7 +54,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   _BrandMark(color: theme.colorScheme.primary),
                   const SizedBox(height: 24),
                   Text(
-                    'Worship Flow',
+                    'WorshipFlow',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.displaySmall,
                   ),

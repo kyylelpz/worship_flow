@@ -7,6 +7,7 @@ import '../../../core/firebase/navigation_resume.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../songs/providers/song_providers.dart';
 import '../../../core/models/setlist.dart';
@@ -373,42 +374,57 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                           overflow: TextOverflow.ellipsis),
                     ]))),
         actions: [
-          ValueListenableBuilder<bool>(
-            valueListenable: _metronome,
-            builder: (context, playing, _) => Semantics(
-              toggled: playing,
-              child: IconButton(
-                tooltip: playing ? 'Stop metronome' : 'Start metronome',
-                color: playing
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).colorScheme.onSurfaceVariant,
-                icon: const Icon(Icons.av_timer_rounded),
-                onPressed: () async {
-                  if (playing) {
-                    _metronome.stop();
-                    return;
-                  }
-                  final pattern = MetronomePattern.parse(
-                      arrangement?.bpm, arrangement?.timeSignature);
-                  if (pattern == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text(
-                            'Metronome needs a BPM from 1–400 and 3/4, 4/4, 6/8 or 8/8 time.')));
-                    return;
-                  }
-                  try {
-                    await _metronome.start(pattern);
-                  } catch (_) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content:
-                              Text('Metronome audio unavailable. Try again.')));
+          if (!kIsWeb)
+            ValueListenableBuilder<bool>(
+              valueListenable: _metronome,
+              builder: (context, playing, _) => Semantics(
+                toggled: playing,
+                child: IconButton(
+                  tooltip: playing ? 'Stop metronome' : 'Start metronome',
+                  color: playing
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.onSurfaceVariant,
+                  icon: const Icon(Icons.av_timer_rounded),
+                  onPressed: () async {
+                    if (playing) {
+                      _metronome.stop();
+                      return;
                     }
-                  }
-                },
+
+                    final pattern = MetronomePattern.parse(
+                      arrangement?.bpm,
+                      arrangement?.timeSignature,
+                    );
+
+                    if (pattern == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Metronome needs a BPM from 1–400 and 3/4, 4/4, 6/8 or 8/8 time.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
+                    try {
+                      await _metronome.start(pattern);
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Metronome audio unavailable. Try again.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
               ),
             ),
-          ),
+
           IconButton(
             tooltip: 'Chart controls',
             icon: const Icon(Icons.tune_rounded),

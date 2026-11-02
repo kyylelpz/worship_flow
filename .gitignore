@@ -1,5 +1,5 @@
 # ============================================================================
-# Worship Flow — .gitignore
+# WorshipFlow — .gitignore
 # ============================================================================
 
 # --- Dart / Flutter tooling ------------------------------------------------
@@ -18,8 +18,6 @@ build/
 *.mocks.dart
 *.config.dart
 *.gr.dart
-lib/generated_plugin_registrant.dart
-lib/generated_plugin_registrant.dart.lock
 devtools_options.yaml
 
 # --- iOS -------------------------------------------------------------------

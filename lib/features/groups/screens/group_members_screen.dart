@@ -180,7 +180,7 @@ class _MemberEditorScreenState extends ConsumerState<MemberEditorScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             showCloseIcon: true,
             content: Text(widget.member == null
-                ? 'Invitation sent. The recipient can respond in Worship Flow.'
+                ? 'Invitation sent. The recipient can respond in WorshipFlow.'
                 : 'Member updated.')));
         Navigator.pop(context);
       }

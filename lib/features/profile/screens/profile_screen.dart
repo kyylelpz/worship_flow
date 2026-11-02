@@ -193,7 +193,7 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 24),
           Center(
             child: Text(
-              'Worship Flow · Every Note for His Glory',
+              'WorshipFlow · Every Note for His Glory',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: AppColors.lightSecondaryText,
               ),

@@ -1,4 +1,4 @@
-# Worship Flow
+# WorshipFlow
 
 ## Overview
 
@@ -143,7 +143,7 @@ No member invitation codes, external email service, Functions, offline synchroni
 
 - Users: `user-1` Jordan Rivera (Acoustic Guitar), `user-2` Avery Chen (Keys), `user-3` Noah Patel (Drums); example.com emails and initials are fixtures.
 - `group-1`, Grace Community Worship / Grace Community Church: Jordan Administrator, Avery Worship Leader, Noah Worship Trainee. `group-2`, Riverside Youth Band / Riverside Chapel: Jordan Worship Leader, Avery Administrator. Join dates are relative to fixture initialization.
-- Each of the two fixture groups starts with an independent copy of the same eight songs/arrangement IDs, preserving existing setlist references. Ownership is stored by group in the catalog rather than adding fields to the public models; new IDs use UUIDs and changes do not propagate between groups. All seed songs are credited to Worship Flow Originals, with embedded ChordPro and favorite/category metadata:
+- Each of the two fixture groups starts with an independent copy of the same eight songs/arrangement IDs, preserving existing setlist references. Ownership is stored by group in the catalog rather than adding fields to the public models; new IDs use UUIDs and changes do not propagate between groups. All seed songs are credited to WorshipFlow Originals, with embedded ChordPro and favorite/category metadata:
 
 | ID | Title | Source key / Full Band BPM |
 | --- | --- | --- |
@@ -180,7 +180,7 @@ The engine under `features/charts/{models,data}/` is pure Dart and does not impo
 - Canonical source may mix letters and Nashville roots `1`–`7`, prefixed accidentals, supported qualities/extensions and numbered slash bass (`[5m7]`, `[b7/1]`, `[1/3]`). `ChordProParser.parse(numberKey: ...)` supplies an explicit numbered context; otherwise the first source `{key}`/`{k}` remains supported. In Rehearsal the item key overrides source metadata for numbers. Keyless numbered source and optional grids render without a missing-source-key warning. Unsupported numeric tokens remain literal with warnings. Original degree spellings, source text and anchors survive transforms. Roman numerals, mixed letter/number slash roots, fractional extensions and arbitrary numeric suffixes remain unsupported.
 - `ChartTransformer.prepare` validates references and selects the item key, explicit `previewKey`, or first available song Vocal Key Preset. Without any selected key it requests one instead of guessing. Numbers resolve directly in that context; letter chords use explicit `sourceKey` or source `{key}` for transposition. Unknown-source letters stay literal with an actionable warning; a known letter-source major/minor change is rejected. Personal offsets apply afterward once. Arrangement meter is the grid fallback. No title/artist/key/tempo/time directive is required for a numbered arrangement; header metadata comes from the Song/Arrangement/item. The retained `SourceChartView` is no longer used by Rehearsal.
 
-Limitations: not a complete ChordPro specification implementation. Standalone directives are recognized; inline/malformed directives remain literal. Unknown chord text, unsupported directives and tablature are preserved, not interpreted. There is no tablature transposition, fretboard/capo realization, automatic chorus expansion, polychord/microtonal analysis, general ChordPro rhythmic-grid interpretation beyond the explicit Worship Flow extension below, key-modulation-aware transformations, or harmonic/melodic-minor inference. Bare lines consisting entirely of supported chord/layout tokens are treated as chord-only lines (so a lone `A` is ambiguous). Offsets count UTF-16 code units, not rendered pixels/graphemes; the renderer measures anchors and stacks colliding labels without changing offsets. Target-key transposition needs a known source key; Nashville needs a key; invalid explicit keys or mismatched references raise `ArgumentError`. Source metadata remains canonical while `ChartDocument.key` records the effective transformed key.
+Limitations: not a complete ChordPro specification implementation. Standalone directives are recognized; inline/malformed directives remain literal. Unknown chord text, unsupported directives and tablature are preserved, not interpreted. There is no tablature transposition, fretboard/capo realization, automatic chorus expansion, polychord/microtonal analysis, general ChordPro rhythmic-grid interpretation beyond the explicit WorshipFlow extension below, key-modulation-aware transformations, or harmonic/melodic-minor inference. Bare lines consisting entirely of supported chord/layout tokens are treated as chord-only lines (so a lone `A` is ambiguous). Offsets count UTF-16 code units, not rendered pixels/graphemes; the renderer measures anchors and stacks colliding labels without changing offsets. Target-key transposition needs a known source key; Nashville needs a key; invalid explicit keys or mismatched references raise `ArgumentError`. Source metadata remains canonical while `ChartDocument.key` records the effective transformed key.
 
 ## Chart renderer and timing grids (Phase 2B)
 
@@ -192,7 +192,7 @@ The old left rail is removed from `ChordChartView`. Rounded section buttons form
 
 The active bubble updates after manual scrolling becomes idle, and recomputes after viewport, text-scale or chart-setting changes. Programmatic jumps highlight immediately; Editor Preview disables section tracking and measurements entirely. The last section becomes active at the chart bottom. The bubble stack has 48-pixel minimum touch targets, uses the current theme, respects side/bottom safe areas, and is bounded to 360 pixels or the available viewport height. Longer lists scroll independently of the chart. A narrow right gutter reserves overlay space even while hidden, so Hide/Show affects only the bubbles: lyrics do not rewrap and chart scroll, song selection, personal transpose and preferences remain unchanged. The visibility choice persists during song switching within the current Rehearsal screen. Horizontal song swipes and the setlist drawer retain their existing behavior. Buttons are not draggable. The translucent settings overlay is not implemented.
 
-Optional timing grids live in the **same canonical arrangement source**, alongside lyric sections. Supported Worship Flow syntax:
+Optional timing grids live in the **same canonical arrangement source**, alongside lyric sections. Supported WorshipFlow syntax:
 
 ```chordpro
 {key: D}

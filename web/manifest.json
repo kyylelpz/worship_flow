@@ -1,11 +1,11 @@
 {
-    "name": "worship_flow",
-    "short_name": "worship_flow",
+    "name": "WorshipFlow",
+    "short_name": "WorshipFlow",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#152D97",
+    "description": "Every Note for His Glory",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

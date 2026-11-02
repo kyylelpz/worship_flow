@@ -130,7 +130,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-1',
     title: 'Anchor of the Morning',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Praise',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Jordan', key: 'G'),
@@ -157,7 +157,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-2',
     title: 'Mercy Like a River',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Worship',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Jordan', key: 'D'),
@@ -177,7 +177,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-3',
     title: 'Silent Hallelujah',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Worship',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Avery', key: 'C'),
@@ -196,7 +196,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-4',
     title: 'Bright Horizon',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Praise',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Jordan', key: 'A'),
@@ -215,7 +215,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-5',
     title: 'Carried Through the Fire',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Worship',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Noah', key: 'Em'),
@@ -234,7 +234,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-6',
     title: 'Open Hands',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Worship',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Jordan', key: 'B'),
@@ -254,7 +254,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-7',
     title: 'Faithful in the Waiting',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Worship',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Avery', key: 'F'),
@@ -273,7 +273,7 @@ const mockSongs = <Song>[
   Song(
     id: 'song-8',
     title: 'King of Every Season',
-    artist: 'Worship Flow Originals',
+    artist: 'WorshipFlow Originals',
     category: 'Praise',
     vocalistKeys: [
       VocalistKey(vocalistName: 'Jordan', key: 'Ab'),
