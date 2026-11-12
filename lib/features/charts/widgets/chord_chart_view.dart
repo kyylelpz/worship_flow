@@ -221,6 +221,9 @@ class _ChordChartViewState extends State<ChordChartView> {
               const CompactGridRow([], text: ''),
         ]);
     Widget gridView(DisplayTimingGrid grid) => CompactChordGrid(
+        chordSpacing: settings.displayMode == ChartDisplayMode.chordsOnly
+            ? settings.chordSpacing
+            : null,
         rows: timingGridRows(grid,
             sourceLines: chart.document.sections
                 .where((s) => s.id == grid.original.sectionId)

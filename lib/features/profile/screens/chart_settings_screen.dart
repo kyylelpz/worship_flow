@@ -137,6 +137,17 @@ class ChartSettingsScreen extends ConsumerWidget {
             ),
           ),
           _SliderRow(
+            label: 'Chord Spacing',
+            value: settings.chordSpacing,
+            min: 0,
+            max: 24,
+            divisions: 24,
+            display: '${settings.chordSpacing.round()} px',
+            onChanged: (v) => controller.update(
+              (s) => s.copyWith(chordSpacing: v),
+            ),
+          ),
+          _SliderRow(
             label: 'Chart width',
             value: settings.chartWidth,
             min: 320,

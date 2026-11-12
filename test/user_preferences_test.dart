@@ -24,6 +24,7 @@ const customChart = ChartSettings(
     sectionHeaderFontSize: 31,
     globalScale: 1.5,
     lineSpacing: 2,
+    chordSpacing: 16,
     chartWidth: 960,
     useNashville: true,
     displayMode: ChartDisplayMode.chordsOnly);
@@ -58,6 +59,24 @@ class DelayedStore implements UserPreferencesStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('Chart Settings slider updates chord spacing', (tester) async {
+    final c = launch();
+    await ready(c);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: c,
+      child: const MaterialApp(home: ChartSettingsScreen()),
+    ));
+    await tester.scrollUntilVisible(find.text('Chord Spacing'), 100);
+    final slider = find.descendant(
+        of: find.widgetWithText(Card, 'Chord Spacing'),
+        matching: find.byType(Slider));
+    final initial = tester.widget<Slider>(slider);
+    expect((initial.min, initial.max, initial.value), (0, 24, 8));
+    initial.onChanged!(16);
+    await tester.pump();
+    expect(c.read(chartSettingsProvider).chordSpacing, 16);
+    expect(tester.widget<Slider>(slider).value, 16);
+  });
   test(
       'all chart fields, theme and arrangement offsets survive a fresh container/store',
       () async {
@@ -151,6 +170,7 @@ void main() {
         'globalScale': 500,
         'sectionHeaderFontSize': null,
         'lineSpacing': .1,
+        'chordSpacing': 25,
         'chartWidth': 0,
         'useNashville': 'yes',
         'displayMode': 'old-name',
@@ -164,6 +184,9 @@ void main() {
       },
     }));
     expectChart(value.chart, const ChartSettings());
+    expect(
+        UserPreferences.decode('{"version":1,"chart":{}}').chart.chordSpacing,
+        8);
     expect(value.offsets, {'good': -12});
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('wf.preferences.${mockCurrentUser.id}', 17);

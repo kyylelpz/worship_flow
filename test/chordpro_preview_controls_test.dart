@@ -31,7 +31,8 @@ void main() {
         useNashville: true, displayMode: ChartDisplayMode.lyricsOnly));
     final preferences = c.read(chartSettingsProvider);
     const draft =
-        '{key: E}\n{section: Verse}\n[1]First lyric [5/1]second lyric';
+        '{key: E}\n{section: Verse}\n[1]First lyric [5/1]second lyric\n'
+        '{start_of_grid: Verse}\n| [1] - [5/1] - |\n{end_of_grid}';
     final saved = openChordProEditor(
         t.element(find.byType(SongLibraryScreen)), draft, vocalistKeys: const [
       VocalistKey(vocalistName: 'Private Vocalist', key: 'A')
@@ -104,6 +105,13 @@ void main() {
     await t.pumpAndSettle();
     expect(labels(t), containsAll(['G', 'D/G']));
     expect(c.read(chartSettingsProvider), same(preferences));
+    final measure = find.byKey(const ValueKey('compact-measure-0'));
+    final width = t.getSize(measure).width;
+    c
+        .read(chartSettingsProvider.notifier)
+        .update((s) => s.copyWith(chordSpacing: 16));
+    await t.pumpAndSettle();
+    expect(t.getSize(measure).width, greaterThan(width));
     expect(draftController.text, draft);
     await t.tap(find.byTooltip('Save'));
     await t.pumpAndSettle();

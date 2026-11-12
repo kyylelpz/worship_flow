@@ -134,6 +134,7 @@ void main() {
               width: width,
               settings: ChartSettings(
                   chordsFontSize: fontSize,
+                  chordSpacing: 0,
                   displayMode: ChartDisplayMode.chordsOnly,
                   useNashville: nashville));
           final grid = find.byType(CompactChordGrid);
@@ -174,6 +175,110 @@ void main() {
                   w is SingleChildScrollView &&
                   w.scrollDirection == Axis.horizontal),
               findsNothing);
+          expect(t.takeException(), isNull);
+        }
+      }
+    }
+  });
+  testWidgets('chord spacing separates labels and reflows intact measures',
+      (t) async {
+    for (final nashville in [false, true]) {
+      final labels =
+          nashville ? ['67/b6', '1M7', '4'] : ['D2/F#', 'GM7', 'CM7/D'];
+      final source = '{key: D}\n{start_of_grid: Intro}\n'
+          '| - [${labels[0]}] - - | [${labels[1]}] - - - | [${labels[2]}] - - - |\n'
+          '{end_of_grid}';
+      for (final width in [320.0, 360.0, 393.0, 600.0]) {
+        var previousWidth = 0.0;
+        double? tightSecondRow;
+        for (final spacing in [0.0, 8.0, 16.0, 21.0, 24.0]) {
+          await render(t, source,
+              width: width,
+              settings: ChartSettings(
+                chordsFontSize: 16,
+                chordSpacing: spacing,
+                displayMode: ChartDisplayMode.chordsOnly,
+                useNashville: nashville,
+              ));
+          final view = t.widget<ChordChartView>(find.byType(ChordChartView));
+          final grid = view.chart.document.grids.single;
+          expect(view.chart.document.source, source);
+          expect(grid.isValid, isTrue);
+          expect(grid.slotsPerMeasure, 4);
+          expect(grid.measures.first.slots[0].sustain, isFalse);
+          expect(grid.measures.first.slots[1].index, 1);
+          expect(grid.measures.first.slots[1].chord, isNotNull);
+          final first =
+              t.getRect(find.byKey(const ValueKey('compact-measure-0')));
+          final second =
+              t.getRect(find.byKey(const ValueKey('compact-measure-1')));
+          expect(first.width, greaterThan(previousWidth));
+          previousWidth = first.width;
+          tightSecondRow ??= second.top;
+          if (width == 320 && spacing == 24) {
+            expect(second.top, greaterThan(tightSecondRow));
+          }
+          for (var m = 0; m < 3; m++) {
+            Rect? previousLabel;
+            final measure =
+                t.getRect(find.byKey(ValueKey('compact-measure-$m')));
+            for (var c = 0; c < 4; c++) {
+              final cell = find.byKey(ValueKey('grid-cell-$m-$c'));
+              final label =
+                  find.descendant(of: cell, matching: find.byType(ChordLabel));
+              expect(t.widget<ChordLabel>(label).text,
+                  c == (m == 0 ? 1 : 0) ? labels[m] : '-');
+              final cellBounds = t.getRect(cell);
+              final labelBounds = t.getRect(label);
+              expect(cellBounds.top, measure.top);
+              expect(
+                  labelBounds.right, lessThanOrEqualTo(cellBounds.right + .01));
+              expect(labelBounds.bottom,
+                  lessThanOrEqualTo(cellBounds.bottom + .01));
+              if (previousLabel != null) {
+                expect(labelBounds.left - previousLabel.right,
+                    closeTo(spacing, .01));
+              }
+              previousLabel = labelBounds;
+            }
+          }
+          expect(t.takeException(), isNull);
+        }
+      }
+    }
+  });
+  testWidgets('each song gets three spacing gaps per four-beat measure',
+      (t) async {
+    for (final chords in ['C D G C', 'Bm Dm C/E Bm', 'D2/F# GM7 CM7/D Asus4']) {
+      for (final fontSize in [14.0, 24.0]) {
+        double? baseWidth;
+        double? barGap;
+        for (final spacing in [0.0, 8.0, 16.0, 21.0, 24.0]) {
+          await render(t, '{start_of_grid: Intro}\n| $chords |\n{end_of_grid}',
+              width: 320,
+              settings: ChartSettings(
+                  chordsFontSize: fontSize,
+                  chordSpacing: spacing,
+                  displayMode: ChartDisplayMode.chordsOnly));
+          final width =
+              t.getSize(find.byKey(const ValueKey('compact-measure-0'))).width;
+          baseWidth ??= width;
+          expect(width, closeTo(baseWidth + 3 * spacing, .01));
+          Rect label(String key) => t.getRect(find.descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byType(ChordLabel)));
+          final firstGap =
+              label('grid-cell-0-0').left - label('grid-bar-0-open').right;
+          barGap ??= firstGap;
+          expect(firstGap, closeTo(barGap, .01));
+          expect(label('grid-bar-0-close').left - label('grid-cell-0-3').right,
+              closeTo(barGap, .01));
+          for (var i = 1; i < 4; i++) {
+            expect(
+                label('grid-cell-0-$i').left -
+                    label('grid-cell-0-${i - 1}').right,
+                closeTo(spacing, .01));
+          }
           expect(t.takeException(), isNull);
         }
       }

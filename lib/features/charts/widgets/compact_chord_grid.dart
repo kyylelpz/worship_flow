@@ -84,9 +84,13 @@ List<CompactGridRow> timingGridRows(DisplayTimingGrid grid,
 
 /// Measures size their own beat cells while sharing a chord baseline.
 class CompactChordGrid extends StatelessWidget {
-  const CompactChordGrid({super.key, required this.rows, required this.style});
+  const CompactChordGrid(
+      {super.key, required this.rows, required this.style, this.chordSpacing});
   final List<CompactGridRow> rows;
   final TextStyle style;
+
+  /// Gap between beats in logical pixels. Null uses font-scaled cell padding.
+  final double? chordSpacing;
   @override
   Widget build(BuildContext context) {
     final font = DefaultTextStyle.of(context).style.merge(style);
@@ -100,30 +104,35 @@ class CompactChordGrid extends StatelessWidget {
     }
     final fontSize = scaler.scale(font.fontSize ?? 16);
     final gap = fontSize * .10;
+    final beatSpacing = chordSpacing;
     final minimumBeatWidth = fontSize * .55;
     final blankLineHeight = fontSize * .45;
     var ascent = 0.0, descent = 0.0;
     final barStyle = font.copyWith(
         fontWeight: FontWeight.w400,
         color: Theme.of(context).colorScheme.onSurfaceVariant);
-    double paddedWidth(String text, TextStyle style) {
+    double paddedWidth(String text, TextStyle style, double padding) {
       if (text.isEmpty) return 0;
       final size = ChordLabel.measure(text, style, scaler);
       ascent = math.max(ascent, size.baseline);
       descent = math.max(descent, size.height - size.baseline);
-      return size.width + 2 * gap;
+      return size.width + 2 * padding;
     }
 
     final barWidths = <String, double>{};
     final layouts = <CompactMeasure, ({List<double> cells, double width})>{};
     for (final measure in measures) {
       final opening = barWidths.putIfAbsent(
-          measure.opening, () => paddedWidth(measure.opening, barStyle));
+          measure.opening, () => paddedWidth(measure.opening, barStyle, gap));
       barWidths.putIfAbsent(
-          measure.closing, () => paddedWidth(measure.closing, barStyle));
+          measure.closing, () => paddedWidth(measure.closing, barStyle, gap));
       final cells = [
-        for (final text in measure.cells)
-          math.max(minimumBeatWidth, paddedWidth(text, font)),
+        for (var i = 0; i < measure.cells.length; i++)
+          if (beatSpacing == null)
+            math.max(minimumBeatWidth, paddedWidth(measure.cells[i], font, gap))
+          else
+            paddedWidth(measure.cells[i], font, 0) +
+                (i + 1 < measure.cells.length ? beatSpacing : 0),
       ];
       layouts[measure] = (
         cells: cells,
@@ -131,7 +140,8 @@ class CompactChordGrid extends StatelessWidget {
       );
     }
     final rowHeight = ascent + descent;
-    Widget label(String text, double width, TextStyle style, Key key) {
+    Widget label(String text, double width, TextStyle style, Key key,
+        {double? leftPadding}) {
       if (text.isEmpty) {
         return SizedBox(key: key, width: width, height: rowHeight);
       }
@@ -141,7 +151,8 @@ class CompactChordGrid extends StatelessWidget {
           width: width,
           height: rowHeight,
           child: Padding(
-              padding: EdgeInsets.only(left: gap, top: ascent - size.baseline),
+              padding: EdgeInsets.only(
+                  left: leftPadding ?? gap, top: ascent - size.baseline),
               child: Align(
                   alignment: Alignment.topLeft,
                   child: ChordLabel(text, style: style))));
@@ -189,7 +200,8 @@ class CompactChordGrid extends StatelessWidget {
                       ValueKey('grid-bar-$m-open')),
                   for (var c = 0; c < measure.cells.length; c++)
                     label(measure.cells[c], layout.cells[c], font,
-                        ValueKey('grid-cell-$m-$c')),
+                        ValueKey('grid-cell-$m-$c'),
+                        leftPadding: beatSpacing == null ? gap : 0),
                 ])));
             if (i == end - 1) {
               cells.add(label(measure.closing, closingWidth, barStyle,

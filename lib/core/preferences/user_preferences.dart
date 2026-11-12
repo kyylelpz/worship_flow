@@ -24,6 +24,7 @@ class UserPreferences {
           'sectionHeaderFontSize': chart.sectionHeaderFontSize,
           'globalScale': chart.globalScale,
           'lineSpacing': chart.lineSpacing,
+          'chordSpacing': chart.chordSpacing,
           'chartWidth': chart.chartWidth,
           'useNashville': chart.useNashville,
           'displayMode': chart.displayMode.name,
@@ -57,6 +58,7 @@ class UserPreferences {
               'sectionHeaderFontSize', defaults.sectionHeaderFontSize, 10, 40),
           globalScale: number('globalScale', defaults.globalScale, .5, 2),
           lineSpacing: number('lineSpacing', defaults.lineSpacing, 1, 2.5),
+          chordSpacing: number('chordSpacing', defaults.chordSpacing, 0, 24),
           chartWidth: number('chartWidth', defaults.chartWidth, 320, 1200),
           useNashville:
               c['useNashville'] is bool ? c['useNashville'] as bool : false,
