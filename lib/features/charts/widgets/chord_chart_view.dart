@@ -325,7 +325,7 @@ class _ChordChartViewState extends State<ChordChartView> {
               Wrap(spacing: 18, runSpacing: 12, children: [
                 for (final measure in grid.measures)
                   for (final slot in measure)
-                    if (!slot.original.sustain)
+                    if (slot.original.chord != null)
                       ChordLabel(slot.text, style: chordStyle),
               ]),
             ],

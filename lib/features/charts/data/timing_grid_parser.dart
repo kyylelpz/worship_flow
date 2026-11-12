@@ -64,12 +64,7 @@ ChartDocument attachTimingGrids(ChartDocument document,
         for (final token in RegExp(r'\S+').allMatches(body)) {
           final text = token[0]!;
           if (text == '-') {
-            if (!hasPreviousChord) {
-              warnings.add(
-                  '${section.label}: sustain without a preceding chord at line ${line.sourceLine}.');
-              valid = false;
-            }
-            slots.add(TimingSlot(slots.length, sustain: true));
+            slots.add(TimingSlot(slots.length, sustain: hasPreviousChord));
           } else {
             final name = text.startsWith('[') && text.endsWith(']')
                 ? text.substring(1, text.length - 1)

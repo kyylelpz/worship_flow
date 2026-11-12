@@ -135,6 +135,7 @@ class DisplayChart {
 }
 
 /// Each slot is one denominator-note beat divided by [TimingGrid.subdivision].
+/// A slot with no chord and no sustain is a rest.
 /// A sustain has no new chord event. It continues the previous event, including
 /// across a bar; no timing is derived from lyric anchors.
 class TimingSlot {

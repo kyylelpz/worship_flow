@@ -29,6 +29,44 @@ void main() {
     expect(grid.measures.first.closingBar, '|');
   });
 
+  test('leading rests occupy slots before the first numbered chord', () {
+    const source = '{start_of_grid: Chorus}\n'
+        '| - - - [1/3] |\n'
+        '| [4] - - - | [1/3] - - - |\n'
+        '| [4/6] - - - | [1/5] - - - |\n'
+        '{end_of_grid}';
+    final chart = parser.parse(source, numberKey: 'E');
+    final grid = chart.grids.single;
+    expect(chart.warnings, isEmpty);
+    expect(grid.isValid, isTrue);
+    expect(grid.measures, hasLength(5));
+    final slots = grid.measures.first.slots;
+    expect(slots.take(3).map((s) => s.chord), [null, null, null]);
+    expect(slots.map((s) => s.sustain), everyElement(false));
+    expect(slots.last.index, 3);
+    expect(slots.last.chord?.text, '1/3');
+    final display = engine.display(chart, const ChartSettings());
+    expect(display.grids.single.measures.first.map((s) => s.text),
+        ['-', '-', '-', 'E/G#']);
+  });
+
+  test('rest and active chord state carry across measures and rows', () {
+    final chart = parser.parse('{section: Chorus}\n[C]Sing\n'
+        '{start_of_grid: Chorus}\n'
+        '| - - - - | - - - C | - - - - |\n'
+        '| - - - - |\n{end_of_grid}');
+    final grid = chart.grids.single;
+    expect(chart.warnings, isEmpty);
+    expect(grid.isValid, isTrue);
+    expect(
+        grid.measures.first.slots.map((s) => s.sustain), everyElement(false));
+    expect(grid.measures[1].slots.take(3).map((s) => s.sustain),
+        everyElement(false));
+    final sustained = grid.measures.skip(2).expand((m) => m.slots);
+    expect(sustained.map((s) => s.sustain), everyElement(true));
+    expect(sustained.map((s) => s.chord), everyElement(isNull));
+  });
+
   test('3/4, 4/4 and 6/8 support explicit subdivisions', () {
     for (final meter in ['3/4', '4/4', '6/8']) {
       for (final subdivision in [1, 2, 3]) {
@@ -93,16 +131,8 @@ void main() {
         isEmpty);
   });
 
-  test(
-      'invalid slot counts, unknown tokens and orphan sustains produce warnings',
-      () {
-    for (final row in [
-      '| C - |',
-      '| - - - - |',
-      '| H - - - |',
-      'C - - -',
-      '| % |'
-    ]) {
+  test('invalid slot counts and unknown tokens produce warnings', () {
+    for (final row in ['| C - |', '| H - - - |', 'C - - -', '| % |']) {
       final chart = parser.parse('{start_of_grid: Verse}\n$row\n{end_of_grid}');
       expect(chart.grids.single.isValid, isFalse, reason: row);
       expect(chart.warnings, isNotEmpty);

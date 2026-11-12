@@ -86,7 +86,7 @@ class ChartTransformer {
                   grid.measures.map((measure) => measure.slots
                       .map((slot) => DisplayTimingSlot(
                           slot,
-                          slot.sustain
+                          slot.chord == null
                               ? '-'
                               : settings.useNashville &&
                                       slot.chord?.symbol != null
