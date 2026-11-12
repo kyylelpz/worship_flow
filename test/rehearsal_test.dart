@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:worship_flow/core/models/chart_settings.dart';
 import 'package:worship_flow/core/firebase/firebase_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:worship_flow/core/router/app_router.dart' as routing;
 import 'package:worship_flow/core/router/route_paths.dart';
 import 'package:worship_flow/features/auth/providers/auth_providers.dart';
 import 'package:worship_flow/features/charts/data/source_chart_adapter.dart';
+import 'package:worship_flow/features/charts/providers/chart_providers.dart';
 import 'package:worship_flow/features/charts/widgets/chord_chart_view.dart';
 import 'package:worship_flow/features/profile/screens/chart_settings_screen.dart';
 import 'package:worship_flow/features/rehearsal/screens/rehearsal_screen.dart';
@@ -54,6 +56,77 @@ Future<void> openDrawer(WidgetTester tester) async {
 }
 
 void main() {
+  testWidgets('toolbar keeps action targets stable across transpose values',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(left: 8, right: 12);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final container = await launch(tester,
+        route: RoutePaths.setlistRehearsalFor('setlist-1'));
+    final transpose =
+        container.read(personalTransposeProvider('song-1-arr-full').notifier);
+    final controls = [
+      find.byType(DropdownButton<ChartDisplayMode>),
+      find.byTooltip('Transpose down'),
+      find.byKey(const ValueKey('transpose-value')),
+      find.byTooltip('Transpose up'),
+      find.byTooltip('Smaller chart text'),
+      find.byTooltip('Larger chart text'),
+      find.byTooltip('Hide Sections'),
+    ];
+
+    for (final scale in [1.0, 2.0]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      for (final width in [320.0, 360.0, 393.0, 600.0]) {
+        tester.view.physicalSize = Size(width, 800);
+        List<Rect>? baseline;
+        for (final value in [0, 9, 10, 12, -9, -10, -12]) {
+          transpose.state = value;
+          await tester.pumpAndSettle();
+          final reason = 'width $width, scale $scale, transpose $value';
+          expect(tester.takeException(), isNull, reason: reason);
+          expect(
+              find.descendant(of: controls[2], matching: find.text('$value')),
+              findsOneWidget,
+              reason: reason);
+          final bounds = controls.map(tester.getRect).toList();
+          baseline ??= bounds;
+          expect(bounds, baseline, reason: reason);
+          for (var i = 0; i < bounds.length; i++) {
+            final rect = bounds[i];
+            expect(rect.left, greaterThanOrEqualTo(8), reason: reason);
+            expect(rect.right, lessThanOrEqualTo(width - 12), reason: reason);
+            if (i != 0 && i != 2) {
+              expect(rect.size, const Size(48, 48), reason: reason);
+            }
+            for (final previous in bounds.take(i)) {
+              expect(rect.overlaps(previous), isFalse, reason: reason);
+            }
+          }
+          if (width == 320) {
+            expect(bounds[4].top, greaterThanOrEqualTo(bounds[3].bottom),
+                reason: reason);
+          }
+          if (width == 600) {
+            expect(bounds[4].top, bounds[3].top, reason: reason);
+          }
+        }
+      }
+    }
+    tester.view.physicalSize = const Size(320, 800);
+    await tester.pumpAndSettle();
+    await tester.tap(controls.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(ChartDisplayMode.chordsOnly.label).last);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(container.read(chartSettingsProvider).displayMode,
+        ChartDisplayMode.chordsOnly);
+  });
+
   test('source adapter groups sections without changing chord symbols', () {
     final sections = sourceChartSections(
         '{key: G}\n{section: Intro}\n[G/B]Hello\n{section: Chorus}\n[C]World');

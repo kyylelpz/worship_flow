@@ -538,72 +538,138 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
             SafeArea(
               top: false,
               bottom: false,
-              child: Row(children: [
-                Expanded(
-                    child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(children: [
-                          const SizedBox(width: 8),
-                          DropdownButton<ChartDisplayMode>(
-                            value: settings.displayMode,
-                            hint: const Text('Display mode'),
-                            items: [
-                              for (final mode in ChartDisplayMode.values)
-                                DropdownMenuItem(
-                                    value: mode, child: Text(mode.label))
-                            ],
-                            onChanged: (mode) {
-                              if (mode != null) {
-                                settingsController.update(
-                                    (s) => s.copyWith(displayMode: mode));
-                              }
-                            },
+              child: LayoutBuilder(builder: (context, constraints) {
+                const actionSize = kMinInteractiveDimension;
+                const selectorMinWidth = 64.0;
+                const gap = 8.0;
+                final boldText = MediaQuery.boldTextOf(context);
+                final painter = TextPainter(
+                  textDirection: Directionality.of(context),
+                  textScaler: MediaQuery.textScalerOf(context),
+                );
+                double measure(String text, TextStyle style) {
+                  painter.text = TextSpan(
+                    text: text,
+                    style: boldText
+                        ? style
+                            .merge(const TextStyle(fontWeight: FontWeight.bold))
+                        : style,
+                  );
+                  painter.layout();
+                  return painter.width.ceilToDouble();
+                }
+
+                var valueWidth = 0.0;
+                final valueStyle = DefaultTextStyle.of(context).style;
+                for (var value = -12; value <= 12; value++) {
+                  final width = measure('$value', valueStyle);
+                  if (width > valueWidth) valueWidth = width;
+                }
+                final menuStyle =
+                    Theme.of(context).textTheme.titleMedium ?? valueStyle;
+                var menuWidth = 0.0;
+                for (final mode in ChartDisplayMode.values) {
+                  // The menu needs room for its labels and 16 px padding on each side.
+                  final width = measure(mode.label, menuStyle) + 32;
+                  if (width > menuWidth) menuWidth = width;
+                }
+                painter.dispose();
+
+                Widget action(IconButton button) =>
+                    SizedBox.square(dimension: actionSize, child: button);
+
+                final wrap = constraints.maxWidth <
+                    selectorMinWidth + 2 * gap + 5 * actionSize + valueWidth;
+                final chartActions = [
+                  action(IconButton(
+                      tooltip: 'Smaller chart text',
+                      icon: const Icon(Icons.text_decrease),
+                      onPressed: () {
+                        settingsController.adjustLyrics(-1);
+                        settingsController.adjustChords(-1);
+                      })),
+                  action(IconButton(
+                      tooltip: 'Larger chart text',
+                      icon: const Icon(Icons.text_increase),
+                      onPressed: () {
+                        settingsController.adjustLyrics(1);
+                        settingsController.adjustChords(1);
+                      })),
+                  action(IconButton(
+                    tooltip: _showSections ? 'Hide Sections' : 'Show Sections',
+                    isSelected: _showSections,
+                    icon: const Icon(Icons.segment),
+                    onPressed: () =>
+                        setState(() => _showSections = !_showSections),
+                  )),
+                ];
+
+                final primaryRow = Row(children: [
+                  const SizedBox(width: gap),
+                  Expanded(
+                    child: DropdownButton<ChartDisplayMode>(
+                      isExpanded: true,
+                      menuWidth: menuWidth.clamp(0.0, constraints.maxWidth),
+                      itemHeight: null,
+                      value: settings.displayMode,
+                      hint: const Text('Display mode',
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      items: [
+                        for (final mode in ChartDisplayMode.values)
+                          DropdownMenuItem(value: mode, child: Text(mode.label))
+                      ],
+                      selectedItemBuilder: (context) => [
+                        for (final mode in ChartDisplayMode.values)
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: Text(mode.label,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
                           ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                              tooltip: 'Transpose down',
-                              icon: const Icon(Icons.remove),
-                              onPressed: personal > -12
-                                  ? () => ref
-                                      .read(personalTransposeProvider(
-                                              arrangement.id)
-                                          .notifier)
-                                      .state--
-                                  : null),
-                          Text('$personal'),
-                          IconButton(
-                              tooltip: 'Transpose up',
-                              icon: const Icon(Icons.add),
-                              onPressed: personal < 12
-                                  ? () => ref
-                                      .read(personalTransposeProvider(
-                                              arrangement.id)
-                                          .notifier)
-                                      .state++
-                                  : null),
-                        ]))),
-                IconButton(
-                    tooltip: 'Smaller chart text',
-                    icon: const Icon(Icons.text_decrease),
-                    onPressed: () {
-                      settingsController.adjustLyrics(-1);
-                      settingsController.adjustChords(-1);
-                    }),
-                IconButton(
-                    tooltip: 'Larger chart text',
-                    icon: const Icon(Icons.text_increase),
-                    onPressed: () {
-                      settingsController.adjustLyrics(1);
-                      settingsController.adjustChords(1);
-                    }),
-                IconButton(
-                  tooltip: _showSections ? 'Hide Sections' : 'Show Sections',
-                  isSelected: _showSections,
-                  icon: const Icon(Icons.segment),
-                  onPressed: () =>
-                      setState(() => _showSections = !_showSections),
-                ),
-              ]),
+                      ],
+                      onChanged: (mode) {
+                        if (mode != null) {
+                          settingsController
+                              .update((s) => s.copyWith(displayMode: mode));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: gap),
+                  action(IconButton(
+                      tooltip: 'Transpose down',
+                      icon: const Icon(Icons.remove),
+                      onPressed: personal > -12
+                          ? () => ref
+                              .read(personalTransposeProvider(arrangement.id)
+                                  .notifier)
+                              .state--
+                          : null)),
+                  SizedBox(
+                    key: const ValueKey('transpose-value'),
+                    width: valueWidth,
+                    child: Text('$personal', textAlign: TextAlign.center),
+                  ),
+                  action(IconButton(
+                      tooltip: 'Transpose up',
+                      icon: const Icon(Icons.add),
+                      onPressed: personal < 12
+                          ? () => ref
+                              .read(personalTransposeProvider(arrangement.id)
+                                  .notifier)
+                              .state++
+                          : null)),
+                  if (!wrap) ...chartActions,
+                ]);
+                return wrap
+                    ? Column(children: [
+                        primaryRow,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: chartActions,
+                        ),
+                      ])
+                    : primaryRow;
+              }),
             ),
           if (!setlist.isPublished)
             Padding(
