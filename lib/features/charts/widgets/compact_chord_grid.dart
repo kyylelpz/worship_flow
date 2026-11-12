@@ -18,12 +18,22 @@ class CompactGridRow {
 
 /// Uses parsed chord source offsets solely to separate labels from written marks.
 /// Chord recognition, transposition and notation remain in the engine.
-CompactGridRow instrumentalGridRow(DisplayChartLine line) {
+CompactGridRow instrumentalGridRow(DisplayChartLine line,
+    {bool separateDashMarks = false}) {
   final tokens = <String>[];
   var cursor = 0;
   void marks(String value) {
-    tokens.addAll(
-        RegExp(r'\|:|:\||\||[^\s|]+').allMatches(value).map((m) => m[0]!));
+    for (final match in RegExp(r'\|:|:\||\||[^\s|]+').allMatches(value)) {
+      final mark = match[0]!;
+      // A written dash run gets one visual cell per mark, without inferring timing.
+      if (separateDashMarks &&
+          mark.length > 1 &&
+          RegExp(r'^-+$').hasMatch(mark)) {
+        tokens.addAll(mark.split(''));
+      } else {
+        tokens.add(mark);
+      }
+    }
   }
 
   for (var i = 0; i < line.chords.length; i++) {

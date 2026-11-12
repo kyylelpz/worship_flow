@@ -207,11 +207,14 @@ class _ChordChartViewState extends State<ChordChartView> {
         _anchors.putIfAbsent(section.id, () => GlobalKey());
       }
     }
+    final gridSpacing = settings.displayMode == ChartDisplayMode.chordsOnly
+        ? settings.chordSpacing
+        : null;
     Widget sequence(Iterable<DisplayChartLine> lines) =>
-        CompactChordGrid(style: chordStyle, rows: [
+        CompactChordGrid(style: chordStyle, chordSpacing: gridSpacing, rows: [
           for (final line in lines)
             if (line.layout != null)
-              instrumentalGridRow(line)
+              instrumentalGridRow(line, separateDashMarks: gridSpacing != null)
             else if (line.chords.isNotEmpty)
               CompactGridRow(
                   [CompactMeasure(line.chords.map((c) => c.text).toList())])
@@ -221,9 +224,7 @@ class _ChordChartViewState extends State<ChordChartView> {
               const CompactGridRow([], text: ''),
         ]);
     Widget gridView(DisplayTimingGrid grid) => CompactChordGrid(
-        chordSpacing: settings.displayMode == ChartDisplayMode.chordsOnly
-            ? settings.chordSpacing
-            : null,
+        chordSpacing: gridSpacing,
         rows: timingGridRows(grid,
             sourceLines: chart.document.sections
                 .where((s) => s.id == grid.original.sectionId)

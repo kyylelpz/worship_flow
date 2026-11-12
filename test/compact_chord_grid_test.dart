@@ -284,6 +284,44 @@ void main() {
       }
     }
   });
+  testWidgets('ordinary and explicit chord rows use the same spacing',
+      (t) async {
+    const sources = [
+      '{section: Intro}\n| [D]--- | ---[Asus4] |',
+      '{section: Intro}\n| [D] - - - | - - - [Asus4] |',
+      '{start_of_grid: Intro}\n| D - - - | - - - Asus4 |\n{end_of_grid}',
+    ];
+    for (final spacing in [0.0, 8.0, 21.0, 24.0]) {
+      List<double>? widths;
+      for (final source in sources) {
+        await render(t, source,
+            width: 393,
+            settings: ChartSettings(
+                chordSpacing: spacing,
+                displayMode: ChartDisplayMode.chordsOnly));
+        final grid = t.widget<CompactChordGrid>(find.byType(CompactChordGrid));
+        expect(grid.rows.single.measures.map((m) => m.cells), [
+          ['D', '-', '-', '-'],
+          ['-', '-', '-', 'Asus4'],
+        ]);
+        final current = [
+          for (var m = 0; m < 2; m++)
+            t.getSize(find.byKey(ValueKey('compact-measure-$m'))).width,
+        ];
+        widths ??= current;
+        expect(current, widths);
+        for (var m = 0; m < 2; m++) {
+          Rect label(int c) => t.getRect(find.descendant(
+              of: find.byKey(ValueKey('grid-cell-$m-$c')),
+              matching: find.byType(ChordLabel)));
+          for (var c = 1; c < 4; c++) {
+            expect(label(c).left - label(c - 1).right, closeTo(spacing, .01));
+          }
+        }
+        expect(t.takeException(), isNull);
+      }
+    }
+  });
   const verse =
       '{key: E}\n{section: Verse 1}\n[1]First lyric [5]second lyric\n{grid_subdivision: 1}\n{start_of_grid: Verse 1}\n| 1 - - - | 5 - - - |\n| b7 - - - | 4 - - - |\n{end_of_grid}';
   testWidgets(
