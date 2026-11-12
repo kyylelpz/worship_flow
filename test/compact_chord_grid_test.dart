@@ -39,7 +39,7 @@ void main() {
     ChartDisplayMode.chordsOnly
   ]) {
     testWidgets(
-        'ordinary Intro in $mode aligns columns, barlines and repeats without expansion',
+        'ordinary Intro in $mode preserves barlines and repeats without expansion',
         (t) async {
       await render(t, intro,
           width: 500, settings: ChartSettings(displayMode: mode));
@@ -49,13 +49,6 @@ void main() {
       expect(find.text('(4x)'), findsOneWidget);
       final grid = t.widget<CompactChordGrid>(find.byType(CompactChordGrid));
       expect(grid.rows.expand((r) => r.measures), hasLength(4));
-      for (var column = 0; column < 4; column++) {
-        Rect cell(int m) =>
-            t.getRect(find.byKey(ValueKey('grid-cell-$m-$column')));
-        expect(cell(0).left, closeTo(cell(2).left, .01));
-        expect(cell(1).left, closeTo(cell(3).left, .01));
-        expect(cell(0).width, closeTo(cell(3).width, .01));
-      }
       expect(t.getTopLeft(find.byKey(const ValueKey('compact-measure-0'))).dy,
           t.getTopLeft(find.byKey(const ValueKey('compact-measure-1'))).dy);
       expect(
@@ -73,6 +66,119 @@ void main() {
       expect(t.takeException(), isNull);
     });
   }
+  testWidgets('explicit measures pack independently and retain every beat cell',
+      (t) async {
+    const standard = '| - D - - | G - - - | A - - - |\n\n'
+        '| - Asus4 - - | G/A - - - | D7/Db - - - |';
+    const numbered = '| - [1] - - | [4] - - - | [5] - - - |\n\n'
+        '| - [1M7] - - | [67/b6] - - - | [5] - - - |';
+    for (final nashville in [false, true]) {
+      final source = '{key: D}\n{start_of_grid: Intro}\n'
+          '${nashville ? numbered : standard}\n{end_of_grid}';
+      final expected = nashville
+          ? [
+              '-',
+              '1',
+              '-',
+              '-',
+              '4',
+              '-',
+              '-',
+              '-',
+              '5',
+              '-',
+              '-',
+              '-',
+              '-',
+              '1M7',
+              '-',
+              '-',
+              '67/b6',
+              '-',
+              '-',
+              '-',
+              '5',
+              '-',
+              '-',
+              '-'
+            ]
+          : [
+              '-',
+              'D',
+              '-',
+              '-',
+              'G',
+              '-',
+              '-',
+              '-',
+              'A',
+              '-',
+              '-',
+              '-',
+              '-',
+              'Asus4',
+              '-',
+              '-',
+              'G/A',
+              '-',
+              '-',
+              '-',
+              'D7/Db',
+              '-',
+              '-',
+              '-'
+            ];
+      for (final width in [320.0, 360.0, 393.0, 600.0]) {
+        for (final fontSize in [14.0, 24.0]) {
+          await render(t, source,
+              width: width,
+              settings: ChartSettings(
+                  chordsFontSize: fontSize,
+                  displayMode: ChartDisplayMode.chordsOnly,
+                  useNashville: nashville));
+          final grid = find.byType(CompactChordGrid);
+          final bounds = t.getRect(grid);
+          Rect measure(int index) =>
+              t.getRect(find.byKey(ValueKey('compact-measure-$index')));
+          expect(measure(0).width, lessThan(measure(3).width));
+          expect(measure(1).width, lessThan(measure(4).width));
+          expect(measure(3).top, greaterThan(measure(2).bottom));
+          if (width == 600 || fontSize == 14) {
+            expect(measure(2).top, measure(0).top);
+          }
+          for (var m = 0; m < 6; m++) {
+            final measureBounds = measure(m);
+            expect(measureBounds.right, lessThanOrEqualTo(bounds.right + .01));
+            for (var c = 0; c < 4; c++) {
+              final cell = find.byKey(ValueKey('grid-cell-$m-$c'));
+              final label =
+                  find.descendant(of: cell, matching: find.byType(ChordLabel));
+              expect(t.widget<ChordLabel>(label).text, expected[m * 4 + c]);
+              final cellBounds = t.getRect(cell);
+              final labelBounds = t.getRect(label);
+              expect(cellBounds.top, measureBounds.top);
+              expect(
+                  labelBounds.right, lessThanOrEqualTo(cellBounds.right + .01));
+              expect(labelBounds.bottom,
+                  lessThanOrEqualTo(cellBounds.bottom + .01));
+              if (c > 0) {
+                final previous =
+                    t.getRect(find.byKey(ValueKey('grid-cell-$m-${c - 1}')));
+                expect(cellBounds.left,
+                    greaterThanOrEqualTo(previous.right - .01));
+              }
+            }
+          }
+          expect(
+              find.byWidgetPredicate((w) =>
+                  w is SingleChildScrollView &&
+                  w.scrollDirection == Axis.horizontal),
+              findsNothing);
+          expect(t.takeException(), isNull);
+        }
+      }
+    }
+  });
   const verse =
       '{key: E}\n{section: Verse 1}\n[1]First lyric [5]second lyric\n{grid_subdivision: 1}\n{start_of_grid: Verse 1}\n| 1 - - - | 5 - - - |\n| b7 - - - | 4 - - - |\n{end_of_grid}';
   testWidgets(
@@ -217,7 +323,12 @@ void main() {
               t.getRect(find.byKey(ValueKey('compact-measure-$index')));
           final regularGap = measure(2).top - measure(0).bottom;
           final groupGap = measure(4).top - measure(2).bottom;
-          expect(groupGap, closeTo(regularGap + 12 * blanks, .01));
+          expect(
+              groupGap,
+              closeTo(
+                  regularGap +
+                      const ChartSettings().chordsFontSize * .45 * blanks,
+                  .01));
           expect(measure(0).left, closeTo(measure(4).left, .01));
           expect(measure(1).left, closeTo(measure(5).left, .01));
           expect(find.text('(2x)'), findsOneWidget);

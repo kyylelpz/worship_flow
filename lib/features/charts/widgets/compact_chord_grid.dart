@@ -82,7 +82,7 @@ List<CompactGridRow> timingGridRows(DisplayTimingGrid grid,
   return rows;
 }
 
-/// All measures in a passage share measured column widths and baselines.
+/// Measures size their own beat cells while sharing a chord baseline.
 class CompactChordGrid extends StatelessWidget {
   const CompactChordGrid({super.key, required this.rows, required this.style});
   final List<CompactGridRow> rows;
@@ -98,37 +98,43 @@ class CompactChordGrid extends StatelessWidget {
           if (row.text != null) Text(row.text!, style: font),
       ]);
     }
-    final columns = measures.map((m) => m.cells.length).reduce(math.max);
-    final gap = scaler.scale(5);
-    final widths = List<double>.filled(columns, 0);
+    final fontSize = scaler.scale(font.fontSize ?? 16);
+    final gap = fontSize * .10;
+    final minimumBeatWidth = fontSize * .55;
+    final blankLineHeight = fontSize * .45;
     var ascent = 0.0, descent = 0.0;
     final barStyle = font.copyWith(
         fontWeight: FontWeight.w400,
         color: Theme.of(context).colorScheme.onSurfaceVariant);
-    var barWidth = ChordLabel.measure('|', barStyle, scaler).width;
-    void height(String text, TextStyle style) {
+    double paddedWidth(String text, TextStyle style) {
+      if (text.isEmpty) return 0;
       final size = ChordLabel.measure(text, style, scaler);
       ascent = math.max(ascent, size.baseline);
       descent = math.max(descent, size.height - size.baseline);
+      return size.width + 2 * gap;
     }
 
+    final barWidths = <String, double>{};
+    final layouts = <CompactMeasure, ({List<double> cells, double width})>{};
     for (final measure in measures) {
-      for (var i = 0; i < measure.cells.length; i++) {
-        widths[i] = math.max(widths[i],
-            ChordLabel.measure(measure.cells[i], font, scaler).width);
-        height(measure.cells[i], font);
-      }
-      for (final bar in [measure.opening, measure.closing]) {
-        barWidth =
-            math.max(barWidth, ChordLabel.measure(bar, barStyle, scaler).width);
-        height(bar, barStyle);
-      }
+      final opening = barWidths.putIfAbsent(
+          measure.opening, () => paddedWidth(measure.opening, barStyle));
+      barWidths.putIfAbsent(
+          measure.closing, () => paddedWidth(measure.closing, barStyle));
+      final cells = [
+        for (final text in measure.cells)
+          math.max(minimumBeatWidth, paddedWidth(text, font)),
+      ];
+      layouts[measure] = (
+        cells: cells,
+        width: cells.fold<double>(opening, (sum, width) => sum + width),
+      );
     }
-    barWidth += gap * 2;
-    final cellWidths = widths.map((w) => w + gap * 2).toList();
-    final measureWidth = barWidth + cellWidths.fold<double>(0, (a, b) => a + b);
     final rowHeight = ascent + descent;
     Widget label(String text, double width, TextStyle style, Key key) {
+      if (text.isEmpty) {
+        return SizedBox(key: key, width: width, height: rowHeight);
+      }
       final size = ChordLabel.measure(text, style, scaler);
       return SizedBox(
           key: key,
@@ -142,16 +148,12 @@ class CompactChordGrid extends StatelessWidget {
     }
 
     return LayoutBuilder(builder: (context, box) {
-      final capacity = math.max(
-          1,
-          math.min(box.maxWidth < 600 ? 2 : 4,
-              ((box.maxWidth - barWidth) / measureWidth).floor()));
       final children = <Widget>[];
       var index = 0;
       for (final sourceRow in rows) {
         if (sourceRow.measures.isEmpty && sourceRow.text?.trim() == '') {
           // A presentation boundary only: never a measure, slot or rest.
-          children.add(SizedBox(height: scaler.scale(12)));
+          children.add(SizedBox(height: blankLineHeight));
           continue;
         }
         if (sourceRow.text != null) {
@@ -159,38 +161,51 @@ class CompactChordGrid extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Text(sourceRow.text!, style: font)));
         }
-        for (var start = 0;
-            start < sourceRow.measures.length;
-            start += capacity) {
-          final end = math.min(start + capacity, sourceRow.measures.length);
+        for (var start = 0; start < sourceRow.measures.length;) {
+          var end = start;
+          var width = 0.0;
+          var closingWidth = 0.0;
+          while (end < sourceRow.measures.length) {
+            final measure = sourceRow.measures[end];
+            final nextWidth = width + layouts[measure]!.width;
+            final nextClosingWidth = barWidths[measure.closing]!;
+            final fits = nextWidth + nextClosingWidth <= box.maxWidth;
+            if (!fits && end > start) break;
+            width = nextWidth;
+            closingWidth = nextClosingWidth;
+            end++;
+            if (!fits) break;
+          }
           final cells = <Widget>[];
           for (var i = start; i < end; i++) {
             final measure = sourceRow.measures[i];
             final m = index++;
+            final layout = layouts[measure]!;
             cells.add(SizedBox(
                 key: ValueKey('compact-measure-$m'),
-                width: measureWidth,
+                width: layout.width,
                 child: Row(children: [
-                  label(measure.opening, barWidth, barStyle,
+                  label(measure.opening, barWidths[measure.opening]!, barStyle,
                       ValueKey('grid-bar-$m-open')),
-                  for (var c = 0; c < columns; c++)
-                    label(c < measure.cells.length ? measure.cells[c] : '',
-                        cellWidths[c], font, ValueKey('grid-cell-$m-$c')),
+                  for (var c = 0; c < measure.cells.length; c++)
+                    label(measure.cells[c], layout.cells[c], font,
+                        ValueKey('grid-cell-$m-$c')),
                 ])));
             if (i == end - 1) {
-              cells.add(label(measure.closing, barWidth, barStyle,
+              cells.add(label(measure.closing, closingWidth, barStyle,
                   ValueKey('grid-bar-$m-close')));
             }
           }
           final row = Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
+              padding: EdgeInsets.symmetric(vertical: fontSize * .05),
               child: Row(mainAxisSize: MainAxisSize.min, children: cells));
           // A single measure can exceed the viewport at large text scales or
           // with dense subdivisions. Only that unavoidable case scrolls sideways.
-          children.add(measureWidth + barWidth > box.maxWidth
+          children.add(width + closingWidth > box.maxWidth
               ? SingleChildScrollView(
                   scrollDirection: Axis.horizontal, child: row)
               : row);
+          start = end;
         }
       }
       return Column(
