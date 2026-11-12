@@ -14,6 +14,7 @@ import 'package:worship_flow/core/preferences/user_preferences.dart';
 import 'package:worship_flow/core/theme/theme_providers.dart';
 import 'package:worship_flow/features/auth/providers/auth_providers.dart';
 import 'package:worship_flow/features/charts/providers/chart_providers.dart';
+import 'package:worship_flow/features/charts/widgets/chord_label.dart';
 import 'package:worship_flow/features/profile/screens/chart_settings_screen.dart';
 import 'navigation_resume_restart_test.dart' as restart;
 
@@ -25,6 +26,8 @@ const customChart = ChartSettings(
     globalScale: 1.5,
     lineSpacing: 2,
     chordSpacing: 16,
+    lightChordColor: ChordColorPreset.teal,
+    darkChordColor: ChordColorPreset.peach,
     chartWidth: 960,
     useNashville: true,
     displayMode: ChartDisplayMode.chordsOnly);
@@ -59,6 +62,63 @@ class DelayedStore implements UserPreferencesStore {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  testWidgets('Chord Color follows active theme and resets only that theme',
+      (tester) async {
+    final c = launch();
+    await ready(c);
+    Future<void> show(ThemeData theme) async {
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: c,
+        child: MaterialApp(theme: theme, home: const ChartSettingsScreen()),
+      ));
+      await tester.scrollUntilVisible(find.text('Chord Color'), 120);
+      await tester.ensureVisible(find.byType(ChordLabel).first);
+      await tester.pumpAndSettle();
+    }
+
+    Color? previewColor() =>
+        tester.widget<ChordLabel>(find.byType(ChordLabel).first).style.color;
+    void expectPresets(bool dark) {
+      for (final preset in ChordColorPreset.values.skip(1)) {
+        expect(find.byTooltip(preset.label),
+            preset.dark == dark ? findsOneWidget : findsNothing);
+      }
+    }
+
+    final light = ThemeData.light();
+    final dark = ThemeData.dark();
+    await show(light);
+    expectPresets(false);
+    expect(previewColor(), light.colorScheme.primary);
+    await tester.ensureVisible(find.byTooltip('Teal'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Teal'));
+    await tester.pumpAndSettle();
+    expect(previewColor(), const Color(0xFF006F70));
+    await show(dark);
+    expectPresets(true);
+    expect(previewColor(), const Color(0xFF8CB8FF));
+    expect(tester.getTopLeft(find.byTooltip('Sky Blue')).dx,
+        lessThan(tester.getTopLeft(find.byTooltip('Soft Yellow')).dx));
+    await tester.ensureVisible(find.byTooltip('Peach'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Peach'));
+    await tester.pumpAndSettle();
+    expect(previewColor(), const Color(0xFFFFB48E));
+    await show(light);
+    expect(previewColor(), const Color(0xFF006F70));
+    await show(dark);
+    expect(previewColor(), const Color(0xFFFFB48E));
+    await tester.ensureVisible(find.byTooltip('Reset chord color'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Reset chord color'));
+    await tester.pumpAndSettle();
+    expect(previewColor(), const Color(0xFF8CB8FF));
+    expect(
+        c.read(chartSettingsProvider).lightChordColor, ChordColorPreset.teal);
+    expect(c.read(chartSettingsProvider).darkChordColor,
+        ChordColorPreset.themeDefault);
+  });
   testWidgets('Chart Settings slider updates chord spacing', (tester) async {
     final c = launch();
     await ready(c);
@@ -171,6 +231,8 @@ void main() {
         'sectionHeaderFontSize': null,
         'lineSpacing': .1,
         'chordSpacing': 25,
+        'lightChordColor': 'peach',
+        'darkChordColor': 'unrecognized',
         'chartWidth': 0,
         'useNashville': 'yes',
         'displayMode': 'old-name',

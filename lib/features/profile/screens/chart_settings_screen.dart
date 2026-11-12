@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/chart_settings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/theme_providers.dart';
+import '../../charts/widgets/chord_label.dart';
 
 /// Account-scoped chart preferences; canonical and shared chart data are untouched.
 class ChartSettingsController extends StateNotifier<ChartSettings> {
@@ -159,6 +160,8 @@ class ChartSettingsScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 20),
+          _ChordColorCard(settings: settings, controller: controller),
+          const SizedBox(height: 20),
           const _SectionLabel('Notation'),
           Card(
             child: SwitchListTile(
@@ -235,6 +238,118 @@ class ChartSettingsScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ChordColorCard extends StatelessWidget {
+  const _ChordColorCard({required this.settings, required this.controller});
+
+  final ChartSettings settings;
+  final ChartSettingsController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final selected = settings.chordColorFor(dark);
+    final argb = selected.argb;
+    final previewColor = argb == null ? theme.colorScheme.primary : Color(argb);
+    final previewStyle = (theme.textTheme.bodyLarge ?? const TextStyle())
+        .copyWith(
+            color: previewColor,
+            fontSize: settings.chordsFontSize * settings.globalScale,
+            fontWeight: FontWeight.w700);
+
+    void select(ChordColorPreset preset) => controller.update((s) => dark
+        ? s.copyWith(darkChordColor: preset)
+        : s.copyWith(lightChordColor: preset));
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(
+                  child:
+                      Text('Chord Color', style: theme.textTheme.titleMedium)),
+              Tooltip(
+                message: 'Reset chord color',
+                child: TextButton(
+                  onPressed: selected == ChordColorPreset.defaultFor(dark)
+                      ? null
+                      : () => select(ChordColorPreset.themeDefault),
+                  child: const Text('Reset'),
+                ),
+              ),
+            ]),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final preset in ChordColorPreset.forTheme(dark))
+                  _ChordSwatch(
+                      preset: preset,
+                      selected: selected == preset,
+                      onTap: () => select(preset)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Preview', style: theme.textTheme.bodySmall),
+            Wrap(
+              spacing: settings.chordSpacing,
+              runSpacing: 4,
+              children: [
+                for (final chord in settings.useNashville
+                    ? const ['1', '4M7', '1/3']
+                    : const ['D', 'GM7', 'D/F#'])
+                  ChordLabel(chord, style: previewStyle),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChordSwatch extends StatelessWidget {
+  const _ChordSwatch(
+      {required this.preset, required this.selected, required this.onTap});
+
+  final ChordColorPreset preset;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(preset.argb!);
+    final checkColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+            ? Colors.white
+            : Colors.black;
+    return Semantics(
+      label: preset.label,
+      button: true,
+      selected: selected,
+      child: Tooltip(
+        message: preset.label,
+        excludeFromSemantics: true,
+        child: Material(
+          color: color,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox.square(
+              dimension: kMinInteractiveDimension,
+              child: selected ? Icon(Icons.check, color: checkColor) : null,
+            ),
+          ),
+        ),
       ),
     );
   }

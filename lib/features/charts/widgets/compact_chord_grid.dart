@@ -99,13 +99,15 @@ class CompactChordGrid extends StatelessWidget {
       required this.rows,
       required this.style,
       this.chordSpacing,
-      this.rhythmColor});
+      this.rhythmColor,
+      this.dashColor});
   final List<CompactGridRow> rows;
   final TextStyle style;
 
   /// Gap between beats in logical pixels. Null uses font-scaled cell padding.
   final double? chordSpacing;
   final Color? rhythmColor;
+  final Color? dashColor;
   @override
   Widget build(BuildContext context) {
     final font = DefaultTextStyle.of(context).style.merge(style);
@@ -127,7 +129,7 @@ class CompactChordGrid extends StatelessWidget {
     final barStyle = font.copyWith(
         fontWeight: FontWeight.w400,
         color: rhythmColor ?? Theme.of(context).colorScheme.onSurfaceVariant);
-    final dashStyle = font.copyWith(color: rhythmColor);
+    final dashStyle = font.copyWith(color: dashColor ?? rhythmColor);
     final dashRun = RegExp(r'^-+$');
     double paddedWidth(String text, TextStyle style, double padding) {
       if (text.isEmpty) return 0;
@@ -221,10 +223,7 @@ class CompactChordGrid extends StatelessWidget {
                     label(
                         measure.cells[c],
                         layout.cells[c],
-                        rhythmColor != null &&
-                                dashRun.hasMatch(measure.cells[c])
-                            ? dashStyle
-                            : font,
+                        dashRun.hasMatch(measure.cells[c]) ? dashStyle : font,
                         ValueKey('grid-cell-$m-$c'),
                         leftPadding: beatSpacing == null ? gap : 0),
                 ])));

@@ -39,7 +39,8 @@ Future<void> render(WidgetTester t, String source,
 }
 
 void main() {
-  testWidgets('dark chart colors preserve layout and chord formatting',
+  testWidgets(
+      'theme defaults and presets preserve chart layout and rhythm colors',
       (t) async {
     const source = '{key: D}\n{start_of_grid: Intro}\n'
         '| - D2/F# GM7 - | CM7/D - - - |\n{end_of_grid}\n'
@@ -48,17 +49,36 @@ void main() {
     for (final width in [320.0, 600.0]) {
       for (final mode in [
         ChartDisplayMode.chordsOnly,
-        ChartDisplayMode.lyricsAndChords
+        ChartDisplayMode.lyricsAndChords,
+        ChartDisplayMode.lyricsOnly,
       ]) {
         for (final nashville in [false, true]) {
           List<Rect>? lightGeometry;
-          for (final dark in [false, true]) {
+          for (final (dark, customized) in [
+            (false, false),
+            (false, true),
+            (true, false),
+            (true, true)
+          ]) {
             await render(t, source,
                 width: width,
                 scale: 1.5,
                 dark: dark,
-                settings:
-                    ChartSettings(displayMode: mode, useNashville: nashville));
+                settings: ChartSettings(
+                    displayMode: mode,
+                    useNashville: nashville,
+                    lightChordColor: customized
+                        ? ChordColorPreset.teal
+                        : ChordColorPreset.themeDefault,
+                    darkChordColor: customized
+                        ? ChordColorPreset.peach
+                        : ChordColorPreset.themeDefault));
+            if (mode == ChartDisplayMode.lyricsOnly) {
+              expect(find.byType(ChordLabel), findsNothing);
+              expect(find.text('Sing together now'), findsOneWidget);
+              expect(t.takeException(), isNull);
+              continue;
+            }
             final grid = find.byType(CompactChordGrid).first;
             final labels =
                 find.descendant(of: grid, matching: find.byType(ChordLabel));
@@ -71,13 +91,26 @@ void main() {
             expect(geometry, lightGeometry);
             final gridContext = t.element(grid);
             final scheme = Theme.of(gridContext).colorScheme;
+            final chordColor = customized
+                ? (dark ? const Color(0xFFFFB48E) : const Color(0xFF006F70))
+                : (dark ? const Color(0xFF8CB8FF) : scheme.primary);
             for (final label in t.widgetList<ChordLabel>(labels)) {
               final bar = label.text == '|';
               final dash = label.text == '-';
               final expected = dark
-                  ? (bar || dash ? palette.rhythm : palette.chord)
-                  : (bar ? scheme.onSurfaceVariant : scheme.primary);
+                  ? (bar || dash ? palette.rhythm : chordColor)
+                  : (bar
+                      ? scheme.onSurfaceVariant
+                      : dash
+                          ? scheme.primary
+                          : chordColor);
               expect(label.style.color, expected);
+            }
+            final extensions =
+                find.descendant(of: labels, matching: find.text('7'));
+            expect(extensions, findsWidgets);
+            for (final extension in t.widgetList<Text>(extensions)) {
+              expect(extension.style?.color, chordColor);
             }
             if (dark) {
               expect(t.widget<Text>(find.text('Intro')).style?.color,
@@ -86,8 +119,9 @@ void main() {
             if (mode == ChartDisplayMode.lyricsAndChords) {
               final lyric = t.widget<AnchoredLyricLine>(
                   find.byType(AnchoredLyricLine).first);
-              expect(lyric.chordStyle.color,
-                  dark ? palette.chord : scheme.primary);
+              expect(lyric.chordStyle.color, chordColor);
+              expect(lyric.lyricStyle.color,
+                  Theme.of(gridContext).textTheme.bodyLarge?.color);
             }
             expect(t.takeException(), isNull);
           }

@@ -176,6 +176,9 @@ class _ChordChartViewState extends State<ChordChartView> {
     final settings = widget.settings;
     final theme = Theme.of(context);
     final palette = widget.rehearsalPalette;
+    final defaultChordColor = palette?.chord ?? theme.colorScheme.primary;
+    final preset = settings.chordColorFor(theme.brightness == Brightness.dark);
+    final argb = preset.argb;
     final lyricStyle = (theme.textTheme.bodyLarge ?? const TextStyle())
         .copyWith(
             fontSize: settings.lyricsFontSize * settings.globalScale,
@@ -184,7 +187,7 @@ class _ChordChartViewState extends State<ChordChartView> {
         .copyWith(
             fontSize: settings.chordsFontSize * settings.globalScale,
             fontWeight: FontWeight.w700,
-            color: palette?.chord ?? theme.colorScheme.primary);
+            color: argb == null ? defaultChordColor : Color(argb));
     final hiddenGridSections = chart.document.grids
         .where((g) => g.targetSectionId != null)
         .map((g) => g.sectionId)
@@ -218,6 +221,7 @@ class _ChordChartViewState extends State<ChordChartView> {
             style: chordStyle,
             chordSpacing: gridSpacing,
             rhythmColor: palette?.rhythm,
+            dashColor: palette?.rhythm ?? defaultChordColor,
             rows: [
               for (final line in lines)
                 if (line.layout != null)
@@ -234,6 +238,7 @@ class _ChordChartViewState extends State<ChordChartView> {
     Widget gridView(DisplayTimingGrid grid) => CompactChordGrid(
         chordSpacing: gridSpacing,
         rhythmColor: palette?.rhythm,
+        dashColor: palette?.rhythm ?? defaultChordColor,
         rows: timingGridRows(grid,
             sourceLines: chart.document.sections
                 .where((s) => s.id == grid.original.sectionId)
