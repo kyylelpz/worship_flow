@@ -215,7 +215,7 @@ void main() {
           expect(first.width, greaterThan(previousWidth));
           previousWidth = first.width;
           tightSecondRow ??= second.top;
-          if (width == 320 && spacing == 24) {
+          if (width == 360 && spacing == 24) {
             expect(second.top, greaterThan(tightSecondRow));
           }
           for (var m = 0; m < 3; m++) {
@@ -252,7 +252,7 @@ void main() {
     for (final chords in ['C D G C', 'Bm Dm C/E Bm', 'D2/F# GM7 CM7/D Asus4']) {
       for (final fontSize in [14.0, 24.0]) {
         double? baseWidth;
-        double? barGap;
+        final barGap = fontSize * .10 + 4;
         for (final spacing in [0.0, 8.0, 16.0, 21.0, 24.0]) {
           await render(t, '{start_of_grid: Intro}\n| $chords |\n{end_of_grid}',
               width: 320,
@@ -269,7 +269,6 @@ void main() {
               matching: find.byType(ChordLabel)));
           final firstGap =
               label('grid-cell-0-0').left - label('grid-bar-0-open').right;
-          barGap ??= firstGap;
           expect(firstGap, closeTo(barGap, .01));
           expect(label('grid-bar-0-close').left - label('grid-cell-0-3').right,
               closeTo(barGap, .01));

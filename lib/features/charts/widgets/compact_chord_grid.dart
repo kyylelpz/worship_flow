@@ -114,6 +114,7 @@ class CompactChordGrid extends StatelessWidget {
     }
     final fontSize = scaler.scale(font.fontSize ?? 16);
     final gap = fontSize * .10;
+    final barPadding = gap + 4;
     final beatSpacing = chordSpacing;
     final minimumBeatWidth = fontSize * .55;
     final blankLineHeight = fontSize * .45;
@@ -132,10 +133,10 @@ class CompactChordGrid extends StatelessWidget {
     final barWidths = <String, double>{};
     final layouts = <CompactMeasure, ({List<double> cells, double width})>{};
     for (final measure in measures) {
-      final opening = barWidths.putIfAbsent(
-          measure.opening, () => paddedWidth(measure.opening, barStyle, gap));
-      barWidths.putIfAbsent(
-          measure.closing, () => paddedWidth(measure.closing, barStyle, gap));
+      final opening = barWidths.putIfAbsent(measure.opening,
+          () => paddedWidth(measure.opening, barStyle, barPadding));
+      barWidths.putIfAbsent(measure.closing,
+          () => paddedWidth(measure.closing, barStyle, barPadding));
       final cells = [
         for (var i = 0; i < measure.cells.length; i++)
           if (beatSpacing == null)
@@ -207,7 +208,8 @@ class CompactChordGrid extends StatelessWidget {
                 width: layout.width,
                 child: Row(children: [
                   label(measure.opening, barWidths[measure.opening]!, barStyle,
-                      ValueKey('grid-bar-$m-open')),
+                      ValueKey('grid-bar-$m-open'),
+                      leftPadding: barPadding),
                   for (var c = 0; c < measure.cells.length; c++)
                     label(measure.cells[c], layout.cells[c], font,
                         ValueKey('grid-cell-$m-$c'),
@@ -215,7 +217,8 @@ class CompactChordGrid extends StatelessWidget {
                 ])));
             if (i == end - 1) {
               cells.add(label(measure.closing, closingWidth, barStyle,
-                  ValueKey('grid-bar-$m-close')));
+                  ValueKey('grid-bar-$m-close'),
+                  leftPadding: barPadding));
             }
           }
           final row = Padding(
