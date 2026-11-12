@@ -135,14 +135,15 @@ void main() {
       'chords-only displays valid measures; invalid grids warn and fall back',
       (tester) async {
     const source = '{key: D}\n{section: Verse}\n[D]One [G]two\n'
-        '{start_of_grid: Verse}\n| D - G - |\n{end_of_grid}';
+        '{start_of_grid: Verse}\n| [D] - | [G] - |\n{end_of_grid}';
     await showChart(tester, source,
         settings:
             const ChartSettings(displayMode: ChartDisplayMode.chordsOnly));
     expect(find.byType(CompactChordGrid), findsOneWidget);
     expect(find.text('Chord sequence · no timing'), findsNothing);
+    expect(find.textContaining('Chart warning:'), findsNothing);
     expect(find.text('-'), findsNWidgets(2));
-    await showChart(tester, source.replaceAll('D - G -', 'D -'),
+    await showChart(tester, source.replaceAll('| [G] - |', '| [G] -'),
         settings:
             const ChartSettings(displayMode: ChartDisplayMode.chordsOnly));
     expect(find.textContaining('Chart warning:'), findsWidgets);

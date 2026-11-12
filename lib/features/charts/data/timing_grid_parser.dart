@@ -87,9 +87,9 @@ ChartDocument attachTimingGrids(ChartDocument document,
                     sourceOffset: start + token.start)));
           }
         }
-        if (slots.length != beats * subdivision || slots.isEmpty) {
+        if (slots.isEmpty) {
           warnings.add(
-              '${section.label}: line ${line.sourceLine} measure ${i + 1} has ${slots.length} slots; expected ${beats * subdivision}.');
+              '${section.label}: line ${line.sourceLine} measure ${i + 1} is empty.');
           valid = false;
         }
         measures.add(TimingMeasure(

@@ -131,8 +131,21 @@ void main() {
         isEmpty);
   });
 
-  test('invalid slot counts and unknown tokens produce warnings', () {
-    for (final row in ['| C - |', '| H - - - |', 'C - - -', '| % |']) {
+  test('well-formed measures accept the written number of slots', () {
+    final chart = parser.parse(
+        '{time: 4/4}\n{start_of_grid: Chorus}\n'
+        '| [C] - | [G] - - - [Am] - | [F] |\n{end_of_grid}');
+    final grid = chart.grids.single;
+    expect(chart.warnings, isEmpty);
+    expect(grid.isValid, isTrue);
+    expect(grid.slotsPerMeasure, 4);
+    expect(grid.measures.map((m) => m.slots.length), [2, 6, 1]);
+    expect(grid.measures.first.slots.last.sustain, isTrue);
+    expect(grid.measures[1].slots[4].chord?.text, 'Am');
+  });
+
+  test('empty measures, missing bars and unknown tokens produce warnings', () {
+    for (final row in ['| |', '| H - - - |', 'C - - -', '| % |']) {
       final chart = parser.parse('{start_of_grid: Verse}\n$row\n{end_of_grid}');
       expect(chart.grids.single.isValid, isFalse, reason: row);
       expect(chart.warnings, isNotEmpty);
