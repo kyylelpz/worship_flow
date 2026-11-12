@@ -95,12 +95,17 @@ List<CompactGridRow> timingGridRows(DisplayTimingGrid grid,
 /// Measures size their own beat cells while sharing a chord baseline.
 class CompactChordGrid extends StatelessWidget {
   const CompactChordGrid(
-      {super.key, required this.rows, required this.style, this.chordSpacing});
+      {super.key,
+      required this.rows,
+      required this.style,
+      this.chordSpacing,
+      this.rhythmColor});
   final List<CompactGridRow> rows;
   final TextStyle style;
 
   /// Gap between beats in logical pixels. Null uses font-scaled cell padding.
   final double? chordSpacing;
+  final Color? rhythmColor;
   @override
   Widget build(BuildContext context) {
     final font = DefaultTextStyle.of(context).style.merge(style);
@@ -121,7 +126,9 @@ class CompactChordGrid extends StatelessWidget {
     var ascent = 0.0, descent = 0.0;
     final barStyle = font.copyWith(
         fontWeight: FontWeight.w400,
-        color: Theme.of(context).colorScheme.onSurfaceVariant);
+        color: rhythmColor ?? Theme.of(context).colorScheme.onSurfaceVariant);
+    final dashStyle = font.copyWith(color: rhythmColor);
+    final dashRun = RegExp(r'^-+$');
     double paddedWidth(String text, TextStyle style, double padding) {
       if (text.isEmpty) return 0;
       final size = ChordLabel.measure(text, style, scaler);
@@ -211,7 +218,13 @@ class CompactChordGrid extends StatelessWidget {
                       ValueKey('grid-bar-$m-open'),
                       leftPadding: barPadding),
                   for (var c = 0; c < measure.cells.length; c++)
-                    label(measure.cells[c], layout.cells[c], font,
+                    label(
+                        measure.cells[c],
+                        layout.cells[c],
+                        rhythmColor != null &&
+                                dashRun.hasMatch(measure.cells[c])
+                            ? dashStyle
+                            : font,
                         ValueKey('grid-cell-$m-$c'),
                         leftPadding: beatSpacing == null ? gap : 0),
                 ])));

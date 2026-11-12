@@ -14,6 +14,7 @@ import '../../../core/models/setlist.dart';
 import '../../../core/models/chart_settings.dart';
 import '../../../core/models/setlist_item.dart';
 import '../../../core/router/route_paths.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../charts/widgets/chord_chart_view.dart';
 import '../../charts/data/chart_transformer.dart';
@@ -304,8 +305,15 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
       }
     }
 
+    final theme = Theme.of(context);
+    final palette =
+        theme.brightness == Brightness.dark ? AppColors.darkRehearsal : null;
     return Scaffold(
+      backgroundColor: palette?.chart,
       appBar: AppBar(
+        backgroundColor: palette?.header,
+        foregroundColor: palette?.heading,
+        surfaceTintColor: palette == null ? null : Colors.transparent,
         leading: Builder(
           builder: (context) => IconButton(
             tooltip: 'Open setlist',
@@ -358,10 +366,15 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(song?.title ?? 'Rehearsal',
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                          style: palette == null
+                              ? null
+                              : TextStyle(color: palette.heading),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
                       if (song != null)
                         Text(song.artist,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: palette?.secondary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis),
                       Text(
@@ -369,8 +382,9 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                               ? setlist.name
                               : 'Key of ${item.performanceKey} · ${arrangement?.timeSignature ?? "—"}'
                                   '${personal == 0 ? "" : " · Display ${chart?.document.key?.name ?? item.performanceKey}"}',
-                          style: Theme.of(context).textTheme.labelSmall,
-                          maxLines: 1,
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: palette?.secondary),
+                          maxLines: palette == null ? 1 : 2,
                           overflow: TextOverflow.ellipsis),
                     ]))),
         actions: [
@@ -424,7 +438,6 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                 ),
               ),
             ),
-
           IconButton(
             tooltip: 'Chart controls',
             icon: const Icon(Icons.tune_rounded),
@@ -660,7 +673,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                           : null)),
                   if (!wrap) ...chartActions,
                 ]);
-                return wrap
+                final toolbar = wrap
                     ? Column(children: [
                         primaryRow,
                         Row(
@@ -669,6 +682,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                         ),
                       ])
                     : primaryRow;
+                return Container(color: palette?.toolbar, child: toolbar);
               }),
             ),
           if (!setlist.isPublished)
@@ -709,6 +723,7 @@ class _RehearsalBodyState extends ConsumerState<_RehearsalBody>
                                 key: ValueKey(
                                     '$index-${item.songId}-${item.arrangementId}'),
                                 showSections: _showSections,
+                                rehearsalPalette: palette,
                                 chart: chart,
                                 settings: settings,
                               ),

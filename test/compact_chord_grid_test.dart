@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:worship_flow/core/models/chart_settings.dart';
+import 'package:worship_flow/core/theme/app_colors.dart';
 import 'package:worship_flow/features/charts/data/chordpro_parser.dart';
 import 'package:worship_flow/features/charts/data/chart_transformer.dart';
 import 'package:worship_flow/features/charts/widgets/chord_chart_view.dart';
@@ -13,11 +14,13 @@ const intro =
 Future<void> render(WidgetTester t, String source,
     {ChartSettings settings = const ChartSettings(),
     double width = 380,
-    double scale = 1}) async {
+    double scale = 1,
+    bool dark = false}) async {
   const engine = ChartTransformer();
   final document =
       engine.transpose(const ChordProParser().parse(source), semitones: 0);
   await t.pumpWidget(MaterialApp(
+      theme: dark ? ThemeData.dark() : null,
       home: MediaQuery(
           data: MediaQueryData(textScaler: TextScaler.linear(scale)),
           child: Scaffold(
@@ -26,6 +29,8 @@ Future<void> render(WidgetTester t, String source,
                       width: width,
                       height: 520,
                       child: ChordChartView(
+                          rehearsalPalette:
+                              dark ? AppColors.darkRehearsal : null,
                           chart: engine.display(document, settings),
                           settings: settings,
                           showSections: false,
@@ -34,6 +39,63 @@ Future<void> render(WidgetTester t, String source,
 }
 
 void main() {
+  testWidgets('dark chart colors preserve layout and chord formatting',
+      (t) async {
+    const source = '{key: D}\n{start_of_grid: Intro}\n'
+        '| - D2/F# GM7 - | CM7/D - - - |\n{end_of_grid}\n'
+        '{section: Verse}\n[D]Sing [D2/F#]together [GM7]now';
+    const palette = AppColors.darkRehearsal;
+    for (final width in [320.0, 600.0]) {
+      for (final mode in [
+        ChartDisplayMode.chordsOnly,
+        ChartDisplayMode.lyricsAndChords
+      ]) {
+        for (final nashville in [false, true]) {
+          List<Rect>? lightGeometry;
+          for (final dark in [false, true]) {
+            await render(t, source,
+                width: width,
+                scale: 1.5,
+                dark: dark,
+                settings:
+                    ChartSettings(displayMode: mode, useNashville: nashville));
+            final grid = find.byType(CompactChordGrid).first;
+            final labels =
+                find.descendant(of: grid, matching: find.byType(ChordLabel));
+            final geometry = labels
+                .evaluate()
+                .map((e) => t.getRect(find.byElementPredicate(
+                    (candidate) => identical(candidate, e))))
+                .toList();
+            lightGeometry ??= geometry;
+            expect(geometry, lightGeometry);
+            final gridContext = t.element(grid);
+            final scheme = Theme.of(gridContext).colorScheme;
+            for (final label in t.widgetList<ChordLabel>(labels)) {
+              final bar = label.text == '|';
+              final dash = label.text == '-';
+              final expected = dark
+                  ? (bar || dash ? palette.rhythm : palette.chord)
+                  : (bar ? scheme.onSurfaceVariant : scheme.primary);
+              expect(label.style.color, expected);
+            }
+            if (dark) {
+              expect(t.widget<Text>(find.text('Intro')).style?.color,
+                  palette.heading);
+            }
+            if (mode == ChartDisplayMode.lyricsAndChords) {
+              final lyric = t.widget<AnchoredLyricLine>(
+                  find.byType(AnchoredLyricLine).first);
+              expect(lyric.chordStyle.color,
+                  dark ? palette.chord : scheme.primary);
+            }
+            expect(t.takeException(), isNull);
+          }
+        }
+      }
+    }
+  });
+
   for (final mode in [
     ChartDisplayMode.lyricsAndChords,
     ChartDisplayMode.chordsOnly

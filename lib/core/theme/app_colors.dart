@@ -1,5 +1,16 @@
 import 'package:flutter/material.dart';
 
+typedef RehearsalPalette = ({
+  Color chart,
+  Color header,
+  Color toolbar,
+  Color chord,
+  Color heading,
+  Color secondary,
+  Color rhythm,
+  Color activeSection,
+});
+
 abstract final class AppColors {
   static const Color primary = Color(0xFF172C53);
   static const Color accent = Color(0xFF2563EB);
@@ -16,6 +27,17 @@ abstract final class AppColors {
   static const Color darkText = Color(0xFFE7ECF5);
   static const Color darkSecondaryText = Color(0xFF94A3B8);
   static const Color darkOutline = Color(0xFF243354);
+
+  static const RehearsalPalette darkRehearsal = (
+    chart: darkBackground,
+    header: Color(0xFF141F34),
+    toolbar: Color(0xFF101A2C),
+    chord: Color(0xFFFCFF99),
+    heading: Color(0xFFF1F5FF),
+    secondary: Color(0xFFB8C5DC),
+    rhythm: Color(0xFF8190AC),
+    activeSection: Color(0xFF304575),
+  );
 
   static const Color success = Color(0xFF16A34A);
   static const Color warning = Color(0xFFD97706);

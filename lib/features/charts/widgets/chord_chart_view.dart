@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/models/chart_settings.dart';
+import '../../../core/theme/app_colors.dart';
 import '../models/chart_document.dart';
 import 'anchored_lyric_line.dart';
 import 'chord_label.dart';
@@ -15,11 +16,13 @@ class ChordChartView extends StatefulWidget {
       {super.key,
       required this.chart,
       required this.settings,
+      this.rehearsalPalette,
       this.sectionNavigationEnabled = true,
       this.showSections = true,
       this.reserveSectionSpace = true});
   final DisplayChart chart;
   final ChartSettings settings;
+  final RehearsalPalette? rehearsalPalette;
 
   /// False removes tracking and navigation layout; showSections only hides UI.
   final bool sectionNavigationEnabled;
@@ -172,6 +175,7 @@ class _ChordChartViewState extends State<ChordChartView> {
     final chart = widget.chart;
     final settings = widget.settings;
     final theme = Theme.of(context);
+    final palette = widget.rehearsalPalette;
     final lyricStyle = (theme.textTheme.bodyLarge ?? const TextStyle())
         .copyWith(
             fontSize: settings.lyricsFontSize * settings.globalScale,
@@ -180,7 +184,7 @@ class _ChordChartViewState extends State<ChordChartView> {
         .copyWith(
             fontSize: settings.chordsFontSize * settings.globalScale,
             fontWeight: FontWeight.w700,
-            color: theme.colorScheme.primary);
+            color: palette?.chord ?? theme.colorScheme.primary);
     final hiddenGridSections = chart.document.grids
         .where((g) => g.targetSectionId != null)
         .map((g) => g.sectionId)
@@ -210,21 +214,26 @@ class _ChordChartViewState extends State<ChordChartView> {
     final gridSpacing = settings.displayMode == ChartDisplayMode.chordsOnly
         ? settings.chordSpacing
         : null;
-    Widget sequence(Iterable<DisplayChartLine> lines) =>
-        CompactChordGrid(style: chordStyle, chordSpacing: gridSpacing, rows: [
-          for (final line in lines)
-            if (line.layout != null)
-              instrumentalGridRow(line, separateDashMarks: gridSpacing != null)
-            else if (line.chords.isNotEmpty)
-              CompactGridRow(
-                  [CompactMeasure(line.chords.map((c) => c.text).toList())])
-            else if (_repeatText(line))
-              CompactGridRow(const [], text: line.original.text)
-            else if (line.original.kind == ChartLineKind.blank)
-              const CompactGridRow([], text: ''),
-        ]);
+    Widget sequence(Iterable<DisplayChartLine> lines) => CompactChordGrid(
+            style: chordStyle,
+            chordSpacing: gridSpacing,
+            rhythmColor: palette?.rhythm,
+            rows: [
+              for (final line in lines)
+                if (line.layout != null)
+                  instrumentalGridRow(line,
+                      separateDashMarks: gridSpacing != null)
+                else if (line.chords.isNotEmpty)
+                  CompactGridRow(
+                      [CompactMeasure(line.chords.map((c) => c.text).toList())])
+                else if (_repeatText(line))
+                  CompactGridRow(const [], text: line.original.text)
+                else if (line.original.kind == ChartLineKind.blank)
+                  const CompactGridRow([], text: ''),
+            ]);
     Widget gridView(DisplayTimingGrid grid) => CompactChordGrid(
         chordSpacing: gridSpacing,
+        rhythmColor: palette?.rhythm,
         rows: timingGridRows(grid,
             sourceLines: chart.document.sections
                 .where((s) => s.id == grid.original.sectionId)
@@ -296,6 +305,7 @@ class _ChordChartViewState extends State<ChordChartView> {
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text(section.label,
               style: theme.textTheme.titleMedium?.copyWith(
+                  color: palette?.heading,
                   fontSize:
                       settings.sectionHeaderFontSize * settings.globalScale)),
           const SizedBox(height: 6),
@@ -365,6 +375,14 @@ class _ChordChartViewState extends State<ChordChartView> {
                 .clamp(48.0,
                     math.max(48.0, math.min(96.0, constraints.maxWidth * .35)))
                 .toDouble();
+        final bubbleLabelStyle = theme.textTheme.labelMedium;
+        final bubbleHeight = math.max(
+            48.0,
+            MediaQuery.textScalerOf(context)
+                        .scale(bubbleLabelStyle?.fontSize ?? 12) *
+                    (bubbleLabelStyle?.height ?? 1.35) *
+                    2 +
+                12);
         final chartScroll = Scrollbar(
           controller: _scroll,
           child: SingleChildScrollView(
@@ -435,6 +453,11 @@ class _ChordChartViewState extends State<ChordChartView> {
                                   final selected =
                                       (activeId ?? sections.first.id) ==
                                           section.id;
+                                  final foreground = selected
+                                      ? palette?.heading ??
+                                          theme.colorScheme.onPrimaryContainer
+                                      : palette?.secondary ??
+                                          theme.colorScheme.onSurfaceVariant;
                                   return Semantics(
                                       key: ValueKey(
                                           'section-state-${section.id}'),
@@ -445,44 +468,51 @@ class _ChordChartViewState extends State<ChordChartView> {
                                           message:
                                               '${section.label} · ${index + 1}/${sections.length}',
                                           child: Material(
-                                              elevation: 2,
-                                              shape: const StadiumBorder(),
+                                              elevation:
+                                                  palette == null ? 2 : 0,
+                                              shape: StadiumBorder(
+                                                  side: selected &&
+                                                          palette != null
+                                                      ? BorderSide(
+                                                          color: palette.chord)
+                                                      : BorderSide.none),
                                               color: selected
-                                                  ? theme.colorScheme
-                                                      .primaryContainer
-                                                  : theme.colorScheme
-                                                      .surfaceContainerHigh,
+                                                  ? palette?.activeSection ??
+                                                      theme.colorScheme
+                                                          .primaryContainer
+                                                  : palette?.header ??
+                                                      theme.colorScheme
+                                                          .surfaceContainerHigh,
                                               child: TextButton(
                                                 key: ValueKey(
                                                     'section-bubble-${section.id}'),
                                                 style: TextButton.styleFrom(
                                                     minimumSize:
                                                         const Size(48, 48),
+                                                    fixedSize: palette == null
+                                                        ? null
+                                                        : Size(bubbleWidth,
+                                                            bubbleHeight),
                                                     padding: const EdgeInsets
                                                         .symmetric(
                                                         horizontal: 4,
                                                         vertical: 6),
-                                                    foregroundColor: selected
-                                                        ? theme.colorScheme
-                                                            .onPrimaryContainer
-                                                        : theme.colorScheme
-                                                            .onSurfaceVariant,
+                                                    foregroundColor: foreground,
                                                     shape:
                                                         const StadiumBorder()),
                                                 onPressed: () =>
                                                     _jumpTo(section),
                                                 child: Text(labels[index],
                                                     textAlign: TextAlign.center,
-                                                    style: theme
-                                                        .textTheme.labelMedium
+                                                    maxLines: palette == null
+                                                        ? null
+                                                        : 2,
+                                                    overflow: palette == null
+                                                        ? null
+                                                        : TextOverflow.ellipsis,
+                                                    style: bubbleLabelStyle
                                                         ?.copyWith(
-                                                            color: selected
-                                                                ? theme
-                                                                    .colorScheme
-                                                                    .onPrimaryContainer
-                                                                : theme
-                                                                    .colorScheme
-                                                                    .onSurfaceVariant,
+                                                            color: foreground,
                                                             fontWeight: selected
                                                                 ? FontWeight
                                                                     .w800

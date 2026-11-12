@@ -9,6 +9,7 @@ import 'package:worship_flow/core/mock_data/mock_users.dart';
 import 'package:worship_flow/core/models/user_role.dart';
 import 'package:worship_flow/core/router/app_router.dart' as routing;
 import 'package:worship_flow/core/router/route_paths.dart';
+import 'package:worship_flow/core/theme/app_colors.dart';
 import 'package:worship_flow/features/auth/providers/auth_providers.dart';
 import 'package:worship_flow/features/charts/data/source_chart_adapter.dart';
 import 'package:worship_flow/features/charts/providers/chart_providers.dart';
@@ -22,7 +23,9 @@ import 'package:worship_flow/features/setlists/widgets/setlist_card.dart';
 import 'package:worship_flow/features/setlists/widgets/upcoming_service_card.dart';
 
 Future<ProviderContainer> launch(WidgetTester tester,
-    {String? route, UserRole role = UserRole.administrator}) async {
+    {String? route,
+    UserRole role = UserRole.administrator,
+    ThemeData? theme}) async {
   final repository = MockSetlistRepository(delay: Duration.zero);
   final container = ProviderContainer(overrides: [
     useMockBackendProvider.overrideWithValue(true),
@@ -40,7 +43,7 @@ Future<ProviderContainer> launch(WidgetTester tester,
   addTearDown(router.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: MaterialApp.router(routerConfig: router),
+    child: MaterialApp.router(routerConfig: router, theme: theme),
   ));
   await tester.pumpAndSettle();
   if (route != null) {
@@ -56,6 +59,64 @@ Future<void> openDrawer(WidgetTester tester) async {
 }
 
 void main() {
+  for (final dark in [false, true]) {
+    testWidgets(
+        'rehearsal surfaces and song metadata in ${dark ? 'dark' : 'light'} mode',
+        (tester) async {
+      final theme = dark ? ThemeData.dark() : ThemeData.light();
+      await launch(tester,
+          route: RoutePaths.setlistRehearsalFor('setlist-1'), theme: theme);
+      const palette = AppColors.darkRehearsal;
+      final appBar = tester.widget<AppBar>(find.byType(AppBar));
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      final metadata = tester.widget<Text>(find.text('Key of G · 4/4'));
+      expect(appBar.backgroundColor, dark ? palette.header : null);
+      expect(scaffold.backgroundColor, dark ? palette.chart : null);
+      expect(metadata.style?.color,
+          dark ? palette.secondary : theme.textTheme.labelSmall?.color);
+      expect(
+          find.ancestor(
+              of: find.byTooltip('Transpose up'),
+              matching: find.byWidgetPredicate((widget) =>
+                  widget is Container && widget.color == palette.toolbar)),
+          dark ? findsOneWidget : findsNothing);
+      if (dark) {
+        final bubbles = find.descendant(
+            of: find.byKey(const ValueKey('section-bubbles')),
+            matching: find.byType(TextButton));
+        expect(bubbles, findsAtLeastNWidgets(2));
+        expect(tester.getSize(bubbles.first), tester.getSize(bubbles.at(1)));
+        for (final (index, color) in [
+          (0, palette.activeSection),
+          (1, palette.header)
+        ]) {
+          expect(
+              find.ancestor(
+                  of: bubbles.at(index),
+                  matching: find.byWidgetPredicate(
+                      (widget) => widget is Material && widget.color == color)),
+              findsOneWidget);
+        }
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        for (final width in [320.0, 600.0]) {
+          tester.view.physicalSize = Size(width, 800);
+          await tester.pumpAndSettle();
+          expect(tester.getSize(bubbles.first), tester.getSize(bubbles.at(1)));
+          final metadataBounds = tester.getRect(find.text('Key of G · 4/4'));
+          final headerBounds = tester.getRect(find.byType(AppBar));
+          expect(headerBounds.contains(metadataBounds.center), isTrue);
+          expect(metadataBounds.bottom, lessThanOrEqualTo(headerBounds.bottom));
+          expect(tester.takeException(), isNull);
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('toolbar keeps action targets stable across transpose values',
       (tester) async {
     tester.view.devicePixelRatio = 1;
