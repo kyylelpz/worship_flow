@@ -206,6 +206,62 @@ void main() {
     expect(find.byType(SongLibraryScreen), findsOneWidget);
   });
 
+  testWidgets('Add Songs numbers selections in tap order across searches',
+      (tester) async {
+    await launch(tester, route: '/setlists/setlist-3/edit');
+    await tester.tap(find.text('Add').first);
+    await tester.pumpAndSettle();
+
+    const first = 'Silent Hallelujah';
+    const middle = 'Mercy Like a River';
+    const last = 'Anchor of the Morning';
+    final search = find.byWidgetPredicate((widget) =>
+        widget is TextField &&
+        widget.decoration?.hintText == 'Search by title or artist');
+    Future<Finder> showSong(String title) async {
+      await tester.enterText(search, title);
+      await tester.pumpAndSettle();
+      return find.widgetWithText(ListTile, title);
+    }
+
+    Finder number(Finder tile) => find.descendant(
+        of: tile,
+        matching: find.byWidgetPredicate((widget) =>
+            widget is Text &&
+            (widget.semanticsLabel?.startsWith('Selection ') ?? false)));
+
+    void expectNumber(Finder tile, int expected) {
+      expect(tester.widget<Text>(number(tile)).data, '$expected');
+    }
+
+    for (final (index, title) in [first, middle, last].indexed) {
+      final tile = await showSong(title);
+      expect(number(tile), findsNothing);
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      expectNumber(tile, index + 1);
+    }
+
+    final middleTile = await showSong(middle);
+    await tester.tap(middleTile);
+    await tester.pumpAndSettle();
+    expect(number(middleTile), findsNothing);
+    expect(find.text('Add (2)'), findsOneWidget);
+    expectNumber(await showSong(last), 2);
+    await tester.tap(await showSong(middle));
+    await tester.pumpAndSettle();
+    expectNumber(middleTile, 3);
+    expectNumber(await showSong(first), 1);
+    expect(find.text('Add (3)'), findsOneWidget);
+    await tester.tap(find.text('Add (3)'));
+    await tester.pumpAndSettle();
+
+    for (final (index, songId)
+        in ['song-8', 'song-5', 'song-3', 'song-1', 'song-2'].indexed) {
+      expect(find.byKey(ValueKey('item-$index-$songId')), findsOneWidget);
+    }
+  });
+
   testWidgets(
       'new songs reach setlist selection and reactive metadata reaches rehearsal',
       (tester) async {
@@ -221,8 +277,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'New Song');
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(CheckboxListTile, 'New Song'), findsOneWidget);
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'New Song'));
+    expect(find.widgetWithText(ListTile, 'New Song'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ListTile, 'New Song'));
     await tester.pump();
     await tester.tap(find.text('Add (1)'));
     await tester.pumpAndSettle();
@@ -282,7 +338,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'New Song');
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(CheckboxListTile, 'New Song'));
+    await tester.tap(find.widgetWithText(ListTile, 'New Song'));
     await tester.pump();
     await tester.tap(find.text('Add (1)'));
     await tester.pumpAndSettle();

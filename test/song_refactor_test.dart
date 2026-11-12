@@ -380,7 +380,7 @@ void main() {
           .byType(TextField)
           .last, song.title);
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(CheckboxListTile, song.title));
+      await tester.tap(find.widgetWithText(ListTile, song.title));
       await tester.pump();
       await tester.tap(find.text('Add (1)'));
       await tester.pumpAndSettle();

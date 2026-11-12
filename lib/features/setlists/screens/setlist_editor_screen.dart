@@ -689,7 +689,7 @@ class _SongPickerSheet extends ConsumerStatefulWidget {
 }
 
 class _SongPickerSheetState extends ConsumerState<_SongPickerSheet> {
-  final _selected = <String>{};
+  final _selected = <String>[];
   String _query = '';
 
   @override
@@ -724,8 +724,11 @@ class _SongPickerSheetState extends ConsumerState<_SongPickerSheet> {
                 const Spacer(),
                 TextButton(
                   onPressed: () {
-                    final picked =
-                        songs.where((s) => _selected.contains(s.id)).toList();
+                    final byId = {for (final song in songs) song.id: song};
+                    final picked = _selected
+                        .map((id) => byId[id])
+                        .whereType<Song>()
+                        .toList();
                     Navigator.of(ctx).pop(picked);
                   },
                   child: Text('Add (${_selected.length})'),
@@ -747,20 +750,45 @@ class _SongPickerSheetState extends ConsumerState<_SongPickerSheet> {
                 itemCount: filtered.length,
                 itemBuilder: (_, i) {
                   final s = filtered[i];
-                  final isSel = _selected.contains(s.id);
-                  return CheckboxListTile(
-                    value: isSel,
-                    title: Text(s.title),
-                    subtitle: Text(s.artist),
-                    onChanged: (v) {
-                      setState(() {
-                        if (v == true) {
-                          _selected.add(s.id);
+                  final index = _selected.indexOf(s.id);
+                  final selected = index >= 0;
+                  final colors = theme.colorScheme;
+                  return Semantics(
+                    selected: selected,
+                    child: ListTile(
+                      title: Text(s.title),
+                      subtitle: Text(s.artist),
+                      trailing: Container(
+                        constraints:
+                            const BoxConstraints(minWidth: 24, minHeight: 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: ShapeDecoration(
+                          color: selected ? colors.primary : null,
+                          shape: StadiumBorder(
+                            side: selected
+                                ? BorderSide.none
+                                : BorderSide(color: colors.outline),
+                          ),
+                        ),
+                        child: Center(
+                          widthFactor: 1,
+                          heightFactor: 1,
+                          child: selected
+                              ? Text('${index + 1}',
+                                  semanticsLabel: 'Selection ${index + 1}',
+                                  style: theme.textTheme.labelMedium
+                                      ?.copyWith(color: colors.onPrimary))
+                              : const SizedBox.shrink(),
+                        ),
+                      ),
+                      onTap: () => setState(() {
+                        if (selected) {
+                          _selected.removeAt(index);
                         } else {
-                          _selected.remove(s.id);
+                          _selected.add(s.id);
                         }
-                      });
-                    },
+                      }),
+                    ),
                   );
                 },
               ),
